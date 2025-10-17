@@ -26,8 +26,15 @@ import {
   Calendar,
   Target,
   BarChart3,
-  LineChart
+  LineChart,
+  Newspaper,
+  Bell,
+  Filter,
+  ExternalLink,
+  Clock,
+  Tag
 } from 'lucide-react';
+import { getClients, getProspects } from './lib/supabase';
 
 // Mock Data
 const mockProspects = [
@@ -112,6 +119,105 @@ const mockClients = [
   { id: 3, name: 'Harrison Blackwell', aum: '$31,800,000', clientSince: '2021' },
   { id: 4, name: 'Eleanor Cunningham', aum: '$19,500,000', clientSince: '2020' },
   { id: 5, name: 'The Kensington Foundation', aum: '$125,000,000', clientSince: '2012' },
+];
+
+const mockNewsAlerts = [
+  {
+    id: 1,
+    title: 'Manhattan Real Estate Prices Surge 12% in Q4',
+    summary: 'Luxury real estate market in Manhattan sees significant gains, particularly in Upper East Side properties. High-net-worth buyers driving demand.',
+    source: 'Wall Street Journal',
+    url: 'https://wsj.com/real-estate',
+    publishedAt: '2 hours ago',
+    relevantClients: ['Richard & Margaret Ashford'],
+    tags: ['Real Estate', 'Manhattan', 'Market Update'],
+    priority: 'high',
+    category: 'Market News'
+  },
+  {
+    id: 2,
+    title: 'New ESG Investment Guidelines Released by SEC',
+    summary: 'SEC publishes updated guidelines for Environmental, Social, and Governance investment disclosures, impacting sustainable investment portfolios.',
+    source: 'Financial Times',
+    url: 'https://ft.com/esg-regulations',
+    publishedAt: '5 hours ago',
+    relevantClients: ['The Kensington Foundation', 'The Whitmore Family Trust'],
+    tags: ['ESG', 'Regulation', 'Compliance'],
+    priority: 'high',
+    category: 'Regulatory'
+  },
+  {
+    id: 3,
+    title: 'Tech Sector Rally Continues: NASDAQ Up 3.2%',
+    summary: 'Technology stocks surge on strong earnings reports from major players. AI and cloud computing sectors lead gains.',
+    source: 'Bloomberg',
+    url: 'https://bloomberg.com/tech-rally',
+    publishedAt: '1 day ago',
+    relevantClients: ['Harrison Blackwell'],
+    tags: ['Technology', 'NASDAQ', 'Equities'],
+    priority: 'medium',
+    category: 'Market News'
+  },
+  {
+    id: 4,
+    title: 'Federal Reserve Signals Potential Rate Cuts in 2025',
+    summary: 'Fed Chair indicates willingness to adjust rates based on inflation data. Bond markets react positively to dovish commentary.',
+    source: 'Reuters',
+    url: 'https://reuters.com/fed-rates',
+    publishedAt: '1 day ago',
+    relevantClients: ['All Clients'],
+    tags: ['Federal Reserve', 'Interest Rates', 'Fixed Income'],
+    priority: 'high',
+    category: 'Economic Policy'
+  },
+  {
+    id: 5,
+    title: 'Private Equity Deals Reach 5-Year High',
+    summary: 'Private equity firms deploy record capital in Q4. Middle-market transactions particularly active in healthcare and technology sectors.',
+    source: 'Private Equity International',
+    url: 'https://pei.com/deals',
+    publishedAt: '2 days ago',
+    relevantClients: ['The Whitmore Family Trust', 'Richard & Margaret Ashford'],
+    tags: ['Private Equity', 'Alternative Investments'],
+    priority: 'medium',
+    category: 'Market News'
+  },
+  {
+    id: 6,
+    title: 'Art Market Shows Resilience Despite Economic Headwinds',
+    summary: 'Contemporary art auctions exceed expectations. Blue-chip artists command premium prices at Sotheby\'s and Christie\'s.',
+    source: 'Art News',
+    url: 'https://artnews.com/market',
+    publishedAt: '3 days ago',
+    relevantClients: ['Eleanor Cunningham'],
+    tags: ['Art Market', 'Alternative Assets'],
+    priority: 'low',
+    category: 'Alternative Investments'
+  },
+  {
+    id: 7,
+    title: 'New Estate Tax Proposals in Congress',
+    summary: 'Bipartisan legislation proposes changes to estate tax exemptions. High-net-worth families should review estate plans.',
+    source: 'Tax Notes',
+    url: 'https://taxnotes.com/estate',
+    publishedAt: '3 days ago',
+    relevantClients: ['All Clients'],
+    tags: ['Estate Planning', 'Tax Law', 'Compliance'],
+    priority: 'high',
+    category: 'Regulatory'
+  },
+  {
+    id: 8,
+    title: 'Sustainable Investing Flows Hit Record $120B',
+    summary: 'ESG-focused funds see unprecedented inflows as institutional investors prioritize sustainability criteria.',
+    source: 'Morningstar',
+    url: 'https://morningstar.com/esg-flows',
+    publishedAt: '4 days ago',
+    relevantClients: ['The Kensington Foundation', 'The Whitmore Family Trust'],
+    tags: ['ESG', 'Sustainable Investing', 'Fund Flows'],
+    priority: 'medium',
+    category: 'Investment Trends'
+  }
 ];
 
 // Custom Node Components for React Flow with Animations
@@ -574,6 +680,106 @@ const UpcomingMeetingsNode = ({ data, selected }) => {
   );
 };
 
+const NewsAlertsNode = ({ data, selected }) => {
+  const clientName = data.clientName || 'The Whitmore Family Trust';
+
+  // Filter news alerts specific to this client
+  const clientNews = mockNewsAlerts.filter(news =>
+    news.relevantClients.includes(clientName) ||
+    news.relevantClients.includes('All Clients')
+  ).slice(0, 3); // Show only top 3 most recent
+
+  const getPriorityColor = (priority) => {
+    switch(priority) {
+      case 'high': return 'bg-red-100 text-red-700 border-red-200';
+      case 'medium': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+      case 'low': return 'bg-green-100 text-green-700 border-green-200';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+  };
+
+  return (
+    <div
+      className={`bg-gradient-to-br from-old-money-cream to-white border-2 rounded-xl p-5 shadow-2xl transition-all duration-300 hover:shadow-3xl hover:scale-105 ${
+        selected ? 'border-old-money-navy ring-4 ring-old-money-navy/20' : 'border-old-money-navy/40'
+      }`}
+      style={{ width: 420 }}
+    >
+      <Handle type="target" position={Position.Top} className="w-3 h-3 opacity-0 hover:opacity-100 transition-opacity" />
+
+      <div className="font-serif text-old-money-navy text-xl font-bold mb-4 flex items-center justify-between">
+        <div className="flex items-center">
+          <Newspaper className="w-6 h-6 mr-2" />
+          Relevant News
+        </div>
+        {clientNews.length > 0 && (
+          <span className="text-xs bg-red-500 text-white px-2 py-1 rounded-full">
+            {clientNews.length} new
+          </span>
+        )}
+      </div>
+
+      <div className="space-y-3 max-h-80 overflow-y-auto">
+        {clientNews.length === 0 ? (
+          <div className="text-center py-6 text-old-money-navy/60 text-sm">
+            <Newspaper className="w-8 h-8 mx-auto mb-2 opacity-40" />
+            No recent news alerts
+          </div>
+        ) : (
+          clientNews.map((news, index) => (
+            <div
+              key={news.id}
+              className="p-3 bg-white rounded-lg border border-old-money-navy/20 hover:border-old-money-navy/40 transition-all duration-200 hover:shadow-md group cursor-pointer"
+            >
+              <div className="flex items-start gap-2 mb-2">
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${getPriorityColor(news.priority)}`}>
+                  {news.priority.toUpperCase()}
+                </span>
+                <span className="text-xs text-old-money-navy/60 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {news.publishedAt}
+                </span>
+              </div>
+
+              <h4 className="font-semibold text-old-money-navy text-sm mb-1 group-hover:text-old-money-navy/80 transition-colors line-clamp-2">
+                {news.title}
+              </h4>
+
+              <p className="text-xs text-old-money-navy/70 mb-2 line-clamp-2">
+                {news.summary}
+              </p>
+
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-old-money-navy/60">
+                  {news.source}
+                </span>
+                <a
+                  href={news.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs font-semibold text-old-money-navy hover:text-old-money-navy/70 transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Read
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {clientNews.length > 0 && (
+        <button className="w-full mt-3 py-2 bg-old-money-navy/5 hover:bg-old-money-navy/10 text-old-money-navy text-sm font-semibold rounded-lg transition-all duration-200">
+          View All News Alerts
+        </button>
+      )}
+
+      <Handle type="source" position={Position.Bottom} className="w-3 h-3 opacity-0 hover:opacity-100 transition-opacity" />
+    </div>
+  );
+};
+
 const nodeTypes = {
   portfolioAllocation: PortfolioAllocationNode,
   netWorth: NetWorthNode,
@@ -581,18 +787,64 @@ const nodeTypes = {
   goals: GoalsNode,
   notes: NotesNode,
   meetings: UpcomingMeetingsNode,
+  newsAlerts: NewsAlertsNode,
 };
 
 // Main App Component
 function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activePage, setActivePage] = useState('prospects');
-  const [selectedProspect, setSelectedProspect] = useState(mockProspects[0]);
+  const [selectedProspect, setSelectedProspect] = useState(null);
   const [advisorProfile, setAdvisorProfile] = useState({
     name: 'Penelope Whitmore',
     email: 'p.whitmore@sentio.com',
     password: '••••••••'
   });
+
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showSignup, setShowSignup] = useState(false);
+
+  // Supabase data state
+  const [clients, setClients] = useState([]);
+  const [prospects, setProspects] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load data from Supabase (only when authenticated)
+  useEffect(() => {
+    async function loadData() {
+      if (!isAuthenticated) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const [clientsData, prospectsData] = await Promise.all([
+          getClients(),
+          getProspects()
+        ]);
+
+        setClients(clientsData || []);
+        setProspects(prospectsData || []);
+
+        // Set first prospect as selected if available
+        if (prospectsData && prospectsData.length > 0) {
+          setSelectedProspect(prospectsData[0]);
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+        // Fallback to mock data if Supabase fails
+        setClients(mockClients);
+        setProspects(mockProspects);
+        setSelectedProspect(mockProspects[0]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadData();
+  }, [isAuthenticated]);
 
   // React Flow state
   const initialNodes = [
@@ -632,6 +884,12 @@ function App() {
       position: { x: 830, y: 400 },
       data: { note: 'Client Profile:\n• Risk Tolerance: Moderate-Conservative\n• Investment Horizon: 15-20 years\n• Primary Goals: Retirement, Education Fund\n• Prefers: ESG investments, quarterly reviews\n\nNext Review: November 15, 2024' },
     },
+    {
+      id: '7',
+      type: 'newsAlerts',
+      position: { x: 50, y: 750 },
+      data: { clientName: 'The Whitmore Family Trust' },
+    },
   ];
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -642,126 +900,322 @@ function App() {
     [setEdges]
   );
 
+  // State for news filters
+  const [selectedPriority, setSelectedPriority] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedClient, setSelectedClient] = useState('all');
+
   // Navigation items
   const navItems = [
     { id: 'prospects', label: 'Prospects', icon: Users },
     { id: 'clients', label: 'Clients', icon: UserCheck },
+    { id: 'news', label: 'News Alerts', icon: Newspaper },
     { id: 'dashboard', label: 'Client Dashboard', icon: LayoutDashboard },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
-  // Page Components
-  const ProspectsPage = () => (
-    <div className="flex h-full">
-      {/* Left Column - Prospect List */}
-      <div className="w-80 border-r border-old-money-navy/20 bg-old-money-cream/30 overflow-y-auto">
-        <div className="p-4">
-          <h3 className="font-serif text-xl font-semibold text-old-money-navy mb-4">
-            Pipeline
-          </h3>
-          <div className="space-y-2">
-            {mockProspects.map((prospect) => (
-              <button
-                key={prospect.id}
-                onClick={() => setSelectedProspect(prospect)}
-                className={`w-full text-left p-4 rounded-lg transition-all duration-300 transform hover:scale-102 ${
-                  selectedProspect.id === prospect.id
-                    ? 'bg-old-money-navy text-old-money-cream shadow-lg scale-102'
-                    : 'bg-white hover:bg-old-money-navy/10 text-old-money-navy hover:shadow-md'
-                }`}
-              >
-                <div className="font-semibold">{prospect.name}</div>
-                <div className={`text-sm ${
-                  selectedProspect.id === prospect.id
-                    ? 'text-old-money-cream/80'
-                    : 'text-old-money-navy/60'
-                }`}>
-                  {prospect.company}
-                </div>
-                <div className="mt-2">
-                  <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                    prospect.status === 'New'
-                      ? 'bg-blue-100 text-blue-800'
-                      : prospect.status === 'Contacted'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-green-100 text-green-800'
-                  }`}>
-                    {prospect.status}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+  // Login/Signup handlers
+  const handleLogin = (email, password) => {
+    // For now, accept any credentials
+    setIsAuthenticated(true);
+    setAdvisorProfile({
+      ...advisorProfile,
+      email: email,
+      name: email.split('@')[0] // Use email username as name for now
+    });
+  };
 
-      {/* Right Column - Prospect Details */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-8">
-          <h2 className="font-serif text-3xl font-bold text-old-money-navy mb-2">
-            {selectedProspect.name}
-          </h2>
-          <p className="text-old-money-navy/60 text-lg mb-6">
-            {selectedProspect.company}
-          </p>
+  const handleSignup = (name, email, password) => {
+    // For now, accept any credentials
+    setIsAuthenticated(true);
+    setAdvisorProfile({
+      ...advisorProfile,
+      name: name,
+      email: email
+    });
+  };
 
-          {/* Tags */}
-          <div className="mb-6">
-            <h3 className="font-serif text-lg font-semibold text-old-money-navy mb-2">
-              Profile
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {selectedProspect.tags.map((tag, index) => (
-                <span
-                  key={index}
-                  className="px-3 py-1 bg-old-money-navy/10 text-old-money-navy rounded-full text-sm"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setAdvisorProfile({
+      name: '',
+      email: '',
+      password: ''
+    });
+  };
 
-          {/* Notes */}
-          <div className="mb-6">
-            <h3 className="font-serif text-lg font-semibold text-old-money-navy mb-2">
-              Notes
-            </h3>
-            <p className="text-old-money-navy/80 leading-relaxed">
-              {selectedProspect.notes}
+  // Login/Signup Page Component
+  const LoginPage = () => {
+    const [formData, setFormData] = useState({
+      name: '',
+      email: '',
+      password: ''
+    });
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      if (showSignup) {
+        handleSignup(formData.name, formData.email, formData.password);
+      } else {
+        handleLogin(formData.email, formData.password);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-old-money-navy via-old-money-navy/95 to-old-money-black flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          {/* Logo */}
+          <div className="text-center mb-8">
+            <h1 className="font-serif text-5xl font-bold text-old-money-cream mb-2">
+              Sentio
+            </h1>
+            <p className="text-old-money-cream/60 text-sm">
+              Wealth Management Platform
             </p>
           </div>
 
-          {/* Interaction Log */}
-          <div>
-            <h3 className="font-serif text-lg font-semibold text-old-money-navy mb-3">
-              Interaction History
-            </h3>
-            <div className="space-y-4">
-              {selectedProspect.interactions.map((interaction, index) => (
-                <div
-                  key={index}
-                  className="border-l-4 border-old-money-navy/30 pl-4 py-2"
-                >
-                  <div className="flex items-center gap-3 mb-1">
-                    <span className="font-semibold text-old-money-navy">
-                      {interaction.type}
-                    </span>
-                    <span className="text-sm text-old-money-navy/60">
-                      {interaction.date}
-                    </span>
-                  </div>
-                  <p className="text-old-money-navy/80 text-sm">
-                    {interaction.note}
-                  </p>
+          {/* Login/Signup Card */}
+          <div className="bg-old-money-cream rounded-2xl shadow-2xl p-8 border border-old-money-navy/20">
+            <h2 className="font-serif text-2xl font-bold text-old-money-navy mb-6 text-center">
+              {showSignup ? 'Create Account' : 'Welcome Back'}
+            </h2>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {showSignup && (
+                <div>
+                  <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                    placeholder="Penelope Whitmore"
+                    required={showSignup}
+                  />
                 </div>
-              ))}
+              )}
+
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-old-money-navy text-old-money-cream py-3 rounded-lg font-semibold hover:bg-old-money-navy/90 transition-all duration-200 shadow-lg hover:shadow-xl"
+              >
+                {showSignup ? 'Sign Up' : 'Sign In'}
+              </button>
+            </form>
+
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => {
+                  setShowSignup(!showSignup);
+                  setFormData({ name: '', email: '', password: '' });
+                }}
+                className="text-old-money-navy/70 hover:text-old-money-navy transition-colors text-sm"
+              >
+                {showSignup ? (
+                  <>
+                    Already have an account? <span className="font-semibold">Sign In</span>
+                  </>
+                ) : (
+                  <>
+                    Don't have an account? <span className="font-semibold">Sign Up</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Temporary Notice */}
+            <div className="mt-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-xs text-blue-800 text-center">
+                <strong>Demo Mode:</strong> Any email and password will work for now
+              </p>
             </div>
           </div>
         </div>
       </div>
+    );
+  };
+
+  // Page Components
+  const ProspectsPage = () => {
+    if (loading) {
+      return (
+        <div className="flex h-full items-center justify-center">
+          <div className="text-old-money-navy text-lg">Loading prospects...</div>
+        </div>
+      );
+    }
+
+    if (!selectedProspect && prospects.length === 0) {
+      return (
+        <div className="flex h-full items-center justify-center">
+          <div className="text-center">
+            <Users className="w-16 h-16 mx-auto mb-4 text-old-money-navy/40" />
+            <p className="text-old-money-navy/60 text-lg">No prospects found</p>
+            <p className="text-old-money-navy/40 text-sm mt-2">Add prospects in Supabase to get started</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex h-full">
+        {/* Left Column - Prospect List */}
+        <div className="w-80 border-r border-old-money-navy/20 bg-old-money-cream/30 overflow-y-auto">
+          <div className="p-4">
+            <h3 className="font-serif text-xl font-semibold text-old-money-navy mb-4">
+              Pipeline
+            </h3>
+            <div className="space-y-2">
+              {prospects.map((prospect) => (
+                <button
+                  key={prospect.id}
+                  onClick={() => setSelectedProspect(prospect)}
+                  className={`w-full text-left p-4 rounded-lg transition-all duration-300 transform hover:scale-102 ${
+                    selectedProspect?.id === prospect.id
+                      ? 'bg-old-money-navy text-old-money-cream shadow-lg scale-102'
+                      : 'bg-white hover:bg-old-money-navy/10 text-old-money-navy hover:shadow-md'
+                  }`}
+                >
+                  <div className="font-semibold">{prospect.name}</div>
+                  <div className={`text-sm ${
+                    selectedProspect?.id === prospect.id
+                      ? 'text-old-money-cream/80'
+                      : 'text-old-money-navy/60'
+                  }`}>
+                    {prospect.company || 'No company'}
+                  </div>
+                  <div className="mt-2">
+                    <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                      prospect.status === 'new'
+                        ? 'bg-blue-100 text-blue-800'
+                        : prospect.status === 'contacted'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : prospect.status === 'warm'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {prospect.status}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+      {/* Right Column - Prospect Details */}
+      <div className="flex-1 overflow-y-auto">
+        {selectedProspect ? (
+          <div className="p-8">
+            <h2 className="font-serif text-3xl font-bold text-old-money-navy mb-2">
+              {selectedProspect.name}
+            </h2>
+            <p className="text-old-money-navy/60 text-lg mb-6">
+              {selectedProspect.company}
+            </p>
+
+            {/* Tags */}
+            {selectedProspect.tags && selectedProspect.tags.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-serif text-lg font-semibold text-old-money-navy mb-2">
+                  Profile
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {selectedProspect.tags.map((tag, index) => (
+                    <span
+                      key={index}
+                      className="px-3 py-1 bg-old-money-navy/10 text-old-money-navy rounded-full text-sm"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Notes */}
+            {selectedProspect.notes && (
+              <div className="mb-6">
+                <h3 className="font-serif text-lg font-semibold text-old-money-navy mb-2">
+                  Notes
+                </h3>
+                <p className="text-old-money-navy/80 leading-relaxed">
+                  {selectedProspect.notes}
+                </p>
+              </div>
+            )}
+
+            {/* Interaction Log */}
+            {selectedProspect.interactions && selectedProspect.interactions.length > 0 && (
+              <div>
+                <h3 className="font-serif text-lg font-semibold text-old-money-navy mb-3">
+                  Interaction History
+                </h3>
+                <div className="space-y-4">
+                  {selectedProspect.interactions.map((interaction, index) => (
+                    <div
+                      key={index}
+                      className="border-l-4 border-old-money-navy/30 pl-4 py-2"
+                    >
+                      <div className="flex items-center gap-3 mb-1">
+                        <span className="font-semibold text-old-money-navy">
+                          {interaction.type}
+                        </span>
+                        <span className="text-sm text-old-money-navy/60">
+                          {interaction.date}
+                        </span>
+                      </div>
+                      <p className="text-old-money-navy/80 text-sm">
+                        {interaction.note}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <div className="text-center text-old-money-navy/60">
+              <Users className="w-16 h-16 mx-auto mb-4 opacity-40" />
+              <p>Select a prospect to view details</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
-  );
+    );
+  };
 
   const ClientsPage = () => (
     <div className="p-8">
@@ -819,6 +1273,204 @@ function App() {
       </div>
     </div>
   );
+
+  const NewsAlertsPage = () => {
+    // Filter news based on selected filters
+    const filteredNews = mockNewsAlerts.filter(news => {
+      const priorityMatch = selectedPriority === 'all' || news.priority === selectedPriority;
+      const categoryMatch = selectedCategory === 'all' || news.category === selectedCategory;
+      const clientMatch = selectedClient === 'all' ||
+        news.relevantClients.includes(selectedClient) ||
+        news.relevantClients.includes('All Clients');
+
+      return priorityMatch && categoryMatch && clientMatch;
+    });
+
+    const getPriorityColor = (priority) => {
+      switch(priority) {
+        case 'high': return 'bg-red-100 text-red-800 border-red-300';
+        case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+        case 'low': return 'bg-green-100 text-green-800 border-green-300';
+        default: return 'bg-gray-100 text-gray-800 border-gray-300';
+      }
+    };
+
+    return (
+      <div className="flex h-full">
+        {/* Sidebar Filters */}
+        <div className="w-80 border-r border-old-money-navy/20 bg-old-money-cream/30 overflow-y-auto p-4">
+          <div className="flex items-center gap-2 mb-6">
+            <Filter className="w-5 h-5 text-old-money-navy" />
+            <h3 className="font-serif text-xl font-semibold text-old-money-navy">
+              Filters
+            </h3>
+          </div>
+
+          {/* Priority Filter */}
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-old-money-navy mb-2">
+              Priority Level
+            </label>
+            <select
+              value={selectedPriority}
+              onChange={(e) => setSelectedPriority(e.target.value)}
+              className="w-full px-3 py-2 border border-old-money-navy/30 rounded-lg bg-white text-old-money-navy focus:outline-none focus:border-old-money-navy transition-colors"
+            >
+              <option value="all">All Priorities</option>
+              <option value="high">High Priority</option>
+              <option value="medium">Medium Priority</option>
+              <option value="low">Low Priority</option>
+            </select>
+          </div>
+
+          {/* Category Filter */}
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-old-money-navy mb-2">
+              Category
+            </label>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full px-3 py-2 border border-old-money-navy/30 rounded-lg bg-white text-old-money-navy focus:outline-none focus:border-old-money-navy transition-colors"
+            >
+              <option value="all">All Categories</option>
+              <option value="Market News">Market News</option>
+              <option value="Regulatory">Regulatory</option>
+              <option value="Economic Policy">Economic Policy</option>
+              <option value="Investment Trends">Investment Trends</option>
+              <option value="Alternative Investments">Alternative Investments</option>
+            </select>
+          </div>
+
+          {/* Client Filter */}
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-old-money-navy mb-2">
+              Relevant To Client
+            </label>
+            <select
+              value={selectedClient}
+              onChange={(e) => setSelectedClient(e.target.value)}
+              className="w-full px-3 py-2 border border-old-money-navy/30 rounded-lg bg-white text-old-money-navy focus:outline-none focus:border-old-money-navy transition-colors"
+            >
+              <option value="all">All Clients</option>
+              {mockClients.map(client => (
+                <option key={client.id} value={client.name}>{client.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Results Count */}
+          <div className="pt-4 border-t border-old-money-navy/20">
+            <p className="text-sm text-old-money-navy/60">
+              Showing <span className="font-semibold text-old-money-navy">{filteredNews.length}</span> {filteredNews.length === 1 ? 'alert' : 'alerts'}
+            </p>
+          </div>
+        </div>
+
+        {/* News Feed */}
+        <div className="flex-1 overflow-y-auto p-8">
+          <div className="max-w-4xl">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="font-serif text-3xl font-bold text-old-money-navy mb-2">
+                  News Alerts
+                </h2>
+                <p className="text-old-money-navy/60">
+                  Personalized news based on your clients' portfolios and interests
+                </p>
+              </div>
+              <button className="px-4 py-2 bg-old-money-navy text-old-money-cream rounded-lg hover:bg-old-money-navy/90 transition-all duration-200 flex items-center gap-2 hover:scale-105">
+                <Bell className="w-4 h-4" />
+                <span className="text-sm font-semibold">Configure Alerts</span>
+              </button>
+            </div>
+
+            {/* News Cards */}
+            <div className="space-y-4">
+              {filteredNews.length === 0 ? (
+                <div className="text-center py-12 bg-white rounded-lg border border-old-money-navy/20">
+                  <Newspaper className="w-12 h-12 mx-auto mb-4 text-old-money-navy/40" />
+                  <p className="text-old-money-navy/60">No news alerts match your filters</p>
+                </div>
+              ) : (
+                filteredNews.map((news, index) => (
+                  <div
+                    key={news.id}
+                    className="bg-white rounded-lg border border-old-money-navy/20 p-6 hover:shadow-lg transition-all duration-200 hover:scale-[1.01] group"
+                    style={{
+                      animation: `fadeIn 0.5s ease-out ${index * 0.1}s both`
+                    }}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`text-xs font-semibold px-2 py-1 rounded border ${getPriorityColor(news.priority)}`}>
+                            {news.priority.toUpperCase()}
+                          </span>
+                          <span className="text-xs text-old-money-navy/60 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {news.publishedAt}
+                          </span>
+                        </div>
+                        <h3 className="font-serif text-xl font-bold text-old-money-navy mb-2 group-hover:text-old-money-navy/80 transition-colors">
+                          {news.title}
+                        </h3>
+                      </div>
+                    </div>
+
+                    <p className="text-old-money-navy/80 mb-4 leading-relaxed">
+                      {news.summary}
+                    </p>
+
+                    {/* Tags */}
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {news.tags.map((tag, idx) => (
+                        <span
+                          key={idx}
+                          className="text-xs px-2 py-1 bg-old-money-navy/10 text-old-money-navy rounded-full flex items-center gap-1"
+                        >
+                          <Tag className="w-3 h-3" />
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex items-center justify-between pt-4 border-t border-old-money-navy/10">
+                      <div className="flex items-center gap-4">
+                        <span className="text-sm text-old-money-navy/60">
+                          Source: <span className="font-semibold text-old-money-navy">{news.source}</span>
+                        </span>
+                        <span className="text-sm text-old-money-navy/60">
+                          {news.category}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {news.relevantClients[0] !== 'All Clients' && (
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                            {news.relevantClients.length} {news.relevantClients.length === 1 ? 'client' : 'clients'}
+                          </span>
+                        )}
+                        <a
+                          href={news.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-sm font-semibold text-old-money-navy hover:text-old-money-navy/70 transition-colors"
+                        >
+                          Read More
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const ClientDashboardPage = () => {
     const [selectedClient] = useState('The Whitmore Family Trust');
@@ -914,6 +1566,10 @@ function App() {
                 <StickyNote className="w-3 h-3" />
                 <span>Notes</span>
               </div>
+              <div className="flex items-center gap-2">
+                <Newspaper className="w-3 h-3" />
+                <span>News Alerts</span>
+              </div>
             </div>
           </div>
         </div>
@@ -968,10 +1624,22 @@ function App() {
           <button className="w-full bg-old-money-navy text-old-money-cream py-3 rounded-lg font-semibold hover:bg-old-money-navy/90 transition-colors">
             Save Changes
           </button>
+
+          <button
+            onClick={handleLogout}
+            className="w-full mt-4 bg-red-50 text-red-700 py-3 rounded-lg font-semibold hover:bg-red-100 transition-colors border border-red-200"
+          >
+            Logout
+          </button>
         </div>
       </div>
     </div>
   );
+
+  // Show login page if not authenticated
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
 
   // Render current page
   const renderPage = () => {
@@ -980,6 +1648,8 @@ function App() {
         return <ProspectsPage />;
       case 'clients':
         return <ClientsPage />;
+      case 'news':
+        return <NewsAlertsPage />;
       case 'dashboard':
         return <ClientDashboardPage />;
       case 'settings':
