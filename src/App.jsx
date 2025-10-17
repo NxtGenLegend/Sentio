@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactFlow, {
   Background,
   Controls,
@@ -809,6 +810,7 @@ const nodeTypes = {
 
 // Main App Component
 function App() {
+  const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activePage, setActivePage] = useState('prospects');
   const [selectedProspect, setSelectedProspect] = useState(null);
@@ -2143,10 +2145,7 @@ function App() {
                   {clients.map((client, index) => (
                     <tr
                       key={client.id}
-                      onClick={() => {
-                        setSelectedClient(client);
-                        setActivePage('client-detail');
-                      }}
+                      onClick={() => navigate(`/client/${client.id}`)}
                       className={`border-b border-old-money-navy/10 hover:bg-old-money-cream/50 transition-all duration-200 hover:shadow-sm cursor-pointer ${
                         index % 2 === 0 ? 'bg-old-money-cream/20' : 'bg-white'
                       }`}
