@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ClientCard from './components/ClientCard';
 import ReactFlow, {
   Background,
   Controls,
@@ -2102,8 +2103,8 @@ function App() {
     };
 
     return (
-      <div className="p-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="h-full overflow-y-auto p-8">
+        <div className="flex items-center justify-between mb-6 sticky top-0 bg-old-money-cream z-10 pb-4 pt-2">
           <h2 className="font-serif text-3xl font-bold text-old-money-navy">
             Current Clients
           </h2>
@@ -2126,56 +2127,46 @@ function App() {
           </div>
         ) : (
           <>
-            <div className="bg-white rounded-lg shadow-lg overflow-hidden border border-old-money-navy/20">
-              <table className="w-full">
-                <thead className="bg-old-money-navy text-old-money-cream">
-                  <tr>
-                    <th className="px-6 py-4 text-left font-serif text-lg font-semibold">
-                      Client Name
-                    </th>
-                    <th className="px-6 py-4 text-left font-serif text-lg font-semibold">
-                      Assets Under Management
-                    </th>
-                    <th className="px-6 py-4 text-left font-serif text-lg font-semibold">
-                      Client Since
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.map((client, index) => (
-                    <tr
-                      key={client.id}
-                      onClick={() => navigate(`/client/${client.id}`)}
-                      className={`border-b border-old-money-navy/10 hover:bg-old-money-cream/50 transition-all duration-200 hover:shadow-sm cursor-pointer ${
-                        index % 2 === 0 ? 'bg-old-money-cream/20' : 'bg-white'
-                      }`}
-                    >
-                      <td className="px-6 py-4 font-semibold text-old-money-navy">
-                        {client.first_name && client.last_name
-                          ? `${client.first_name} ${client.middle_name ? client.middle_name + ' ' : ''}${client.last_name}`
-                          : client.name}
-                      </td>
-                      <td className="px-6 py-4 text-old-money-navy">
-                        {formatCurrency(client.aum || 0)}
-                      </td>
-                      <td className="px-6 py-4 text-old-money-navy/70">
-                        {client.client_since}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Summary Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="bg-gradient-to-br from-old-money-navy to-old-money-navy/90 rounded-xl shadow-lg p-6 text-old-money-cream">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-old-money-cream/70 text-sm font-medium mb-1">Total Clients</p>
+                    <p className="text-4xl font-bold font-serif">{clients.length}</p>
+                  </div>
+                  <UserCheck className="w-12 h-12 text-old-money-cream/30" />
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-old-money-gold to-old-money-gold/90 rounded-xl shadow-lg p-6 text-old-money-navy">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-old-money-navy/70 text-sm font-medium mb-1">Total AUM</p>
+                    <p className="text-4xl font-bold font-serif">{formatCurrency(totalAUM)}</p>
+                  </div>
+                  <DollarSign className="w-12 h-12 text-old-money-navy/30" />
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-xl shadow-lg p-6 text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-white/70 text-sm font-medium mb-1">Average AUM</p>
+                    <p className="text-4xl font-bold font-serif">
+                      {formatCurrency(clients.length > 0 ? totalAUM / clients.length : 0)}
+                    </p>
+                  </div>
+                  <TrendingUp className="w-12 h-12 text-white/30" />
+                </div>
+              </div>
             </div>
 
-            <div className="mt-6 p-4 bg-old-money-navy/5 rounded-lg border border-old-money-navy/20">
-              <div className="flex justify-between items-center">
-                <span className="font-serif text-lg text-old-money-navy">
-                  Total Assets Under Management
-                </span>
-                <span className="font-serif text-2xl font-bold text-old-money-navy">
-                  {formatCurrency(totalAUM)}
-                </span>
-              </div>
+            {/* Client Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {clients.map((client) => (
+                <ClientCard key={client.id} client={client} />
+              ))}
             </div>
           </>
         )}

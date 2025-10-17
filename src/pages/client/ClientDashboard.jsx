@@ -6,9 +6,10 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   addEdge,
+  Panel,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Plus, Save, LayoutGrid } from 'lucide-react';
+import { Plus, Save, LayoutGrid, Sparkles, Grid3x3, Maximize2 } from 'lucide-react';
 import { widgetTypes } from '../../components/dashboard/AssetWidgets';
 
 // Custom node components
@@ -19,6 +20,7 @@ const ClientDashboard = ({ clientId }) => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [showWidgetMenu, setShowWidgetMenu] = useState(false);
   const [nextId, setNextId] = useState(1);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Load dashboard from database
   useEffect(() => {
@@ -42,6 +44,7 @@ const ClientDashboard = ({ clientId }) => {
   };
 
   const saveDashboard = async () => {
+    setIsSaving(true);
     try {
       const response = await fetch(`http://localhost:3001/api/dashboard/${clientId}`, {
         method: 'POST',
@@ -52,13 +55,37 @@ const ClientDashboard = ({ clientId }) => {
       });
 
       if (response.ok) {
-        alert('Dashboard saved successfully!');
+        alert('✅ Dashboard saved successfully!');
       }
     } catch (error) {
       console.error('Error saving dashboard:', error);
-      alert('Failed to save dashboard');
+      alert('❌ Failed to save dashboard');
+    } finally {
+      setIsSaving(false);
     }
   };
+
+  const autoLayout = useCallback(() => {
+    const padding = 50;
+    const cardWidth = 320;
+    const cardHeight = 250;
+    const cols = 3;
+
+    const layoutedNodes = nodes.map((node, index) => {
+      const row = Math.floor(index / cols);
+      const col = index % cols;
+
+      return {
+        ...node,
+        position: {
+          x: padding + col * (cardWidth + padding),
+          y: padding + row * (cardHeight + padding),
+        },
+      };
+    });
+
+    setNodes(layoutedNodes);
+  }, [nodes, setNodes]);
 
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge(params, eds)),
@@ -176,59 +203,102 @@ const ClientDashboard = ({ clientId }) => {
   ];
 
   return (
-    <div className="h-full w-full relative">
-      {/* Top Toolbar */}
-      <div className="absolute top-4 left-4 z-10 flex gap-2">
+    <div className="h-full w-full relative bg-gradient-to-br from-old-money-cream via-old-money-cream to-old-money-cream/80">
+      {/* Enhanced Top Toolbar */}
+      <div className="absolute top-4 left-4 z-10 flex gap-3">
         <button
           onClick={() => setShowWidgetMenu(!showWidgetMenu)}
-          className="bg-white px-4 py-2 rounded-lg shadow-lg hover:shadow-xl transition-all flex items-center gap-2 border-2 border-gray-200"
+          className="bg-gradient-to-r from-old-money-navy to-old-money-navy/90 text-old-money-cream px-4 py-2.5 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 flex items-center gap-2 border border-old-money-cream/20 hover:scale-105 transform"
         >
           <Plus className="w-5 h-5" />
-          Add Widget
+          <span className="font-semibold">Add Asset</span>
         </button>
 
         <button
           onClick={saveDashboard}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2"
+          disabled={isSaving}
+          className="bg-gradient-to-r from-old-money-gold to-old-money-gold/90 text-old-money-navy px-4 py-2.5 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 flex items-center gap-2 hover:scale-105 transform disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Save className="w-5 h-5" />
-          Save Layout
+          <span className="font-semibold">{isSaving ? 'Saving...' : 'Save Layout'}</span>
+        </button>
+
+        <button
+          onClick={autoLayout}
+          className="bg-white text-old-money-navy px-4 py-2.5 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 flex items-center gap-2 border border-old-money-navy/20 hover:scale-105 transform"
+        >
+          <Grid3x3 className="w-5 h-5" />
+          <span className="font-semibold">Auto Layout</span>
         </button>
 
         <button
           onClick={() => {
-            setNodes([]);
-            setEdges([]);
+            if (confirm('Clear all widgets? This cannot be undone.')) {
+              setNodes([]);
+              setEdges([]);
+            }
           }}
-          className="bg-gray-100 px-4 py-2 rounded-lg shadow-lg hover:bg-gray-200 transition-all flex items-center gap-2 border-2 border-gray-200"
+          className="bg-red-50 text-red-600 px-4 py-2.5 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 flex items-center gap-2 border border-red-200 hover:bg-red-100 hover:scale-105 transform"
         >
           <LayoutGrid className="w-5 h-5" />
-          Clear All
+          <span className="font-semibold">Clear All</span>
         </button>
       </div>
 
-      {/* Widget Menu */}
+      {/* Info Panel */}
+      {nodes.length === 0 && (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 text-center">
+          <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-old-money-navy/10">
+            <Sparkles className="w-16 h-16 mx-auto mb-4 text-old-money-gold animate-pulse" />
+            <h3 className="text-2xl font-bold text-old-money-navy mb-2 font-serif">
+              Build Your Portfolio Dashboard
+            </h3>
+            <p className="text-old-money-navy/70 mb-4">
+              Click "Add Asset" to start adding widgets to your dashboard
+            </p>
+            <div className="flex gap-2 justify-center">
+              <div className="px-3 py-1 bg-old-money-navy/10 rounded-full text-sm text-old-money-navy">
+                Drag to move
+              </div>
+              <div className="px-3 py-1 bg-old-money-navy/10 rounded-full text-sm text-old-money-navy">
+                Connect widgets
+              </div>
+              <div className="px-3 py-1 bg-old-money-navy/10 rounded-full text-sm text-old-money-navy">
+                Auto-organize
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enhanced Widget Menu */}
       {showWidgetMenu && (
-        <div className="absolute top-20 left-4 z-20 bg-white rounded-lg shadow-2xl border-2 border-gray-200 p-4 w-80">
-          <h3 className="font-semibold text-lg mb-3">Add Widget</h3>
-          <div className="grid grid-cols-2 gap-2">
+        <div className="absolute top-24 left-4 z-20 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-old-money-navy/20 p-6 w-96 animate-in slide-in-from-top duration-300">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-serif text-xl font-bold text-old-money-navy">Add Asset Widget</h3>
+            <button
+              onClick={() => setShowWidgetMenu(false)}
+              className="text-old-money-navy/60 hover:text-old-money-navy transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             {widgetTemplates.map((template) => (
               <button
                 key={template.type}
                 onClick={() => addWidget(template.type, template.defaultData)}
-                className="p-3 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left"
+                className="p-4 border-2 border-old-money-navy/10 rounded-xl hover:border-old-money-gold hover:bg-old-money-gold/10 transition-all duration-200 text-left group hover:scale-105 transform shadow-sm hover:shadow-md"
               >
-                <div className="text-2xl mb-1">{template.icon}</div>
-                <div className="text-sm font-medium">{template.label}</div>
+                <div className="text-3xl mb-2 group-hover:scale-110 transition-transform duration-200">
+                  {template.icon}
+                </div>
+                <div className="text-sm font-semibold text-old-money-navy">
+                  {template.label}
+                </div>
               </button>
             ))}
           </div>
-          <button
-            onClick={() => setShowWidgetMenu(false)}
-            className="mt-3 w-full py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-all"
-          >
-            Close
-          </button>
         </div>
       )}
 
@@ -241,10 +311,27 @@ const ClientDashboard = ({ clientId }) => {
         onConnect={onConnect}
         nodeTypes={nodeTypes}
         fitView
-        className="bg-old-money-cream"
+        className="bg-transparent"
+        defaultEdgeOptions={{
+          type: 'smoothstep',
+          animated: true,
+          style: { stroke: '#C5A572', strokeWidth: 2 },
+        }}
+        connectionLineStyle={{ stroke: '#C5A572', strokeWidth: 2 }}
+        snapToGrid={true}
+        snapGrid={[15, 15]}
       >
-        <Background color="#ddd" gap={20} />
-        <Controls />
+        <Background
+          color="#1a3a52"
+          gap={20}
+          size={1}
+          style={{ opacity: 0.1 }}
+          variant="dots"
+        />
+        <Controls
+          className="bg-white/90 backdrop-blur-sm border border-old-money-navy/20 rounded-xl shadow-lg"
+          style={{ button: { backgroundColor: 'white' } }}
+        />
         <MiniMap
           nodeColor={(node) => {
             const colors = {
@@ -256,10 +343,50 @@ const ClientDashboard = ({ clientId }) => {
               portfolioSummary: '#6366f1',
               alternative: '#14b8a6',
             };
-            return colors[node.type] || '#gray';
+            return colors[node.type] || '#C5A572';
           }}
-          maskColor="rgba(0, 0, 0, 0.1)"
+          className="bg-white/90 backdrop-blur-sm border border-old-money-navy/20 rounded-xl shadow-lg"
+          maskColor="rgba(26, 58, 82, 0.1)"
         />
+
+        {/* Stats Panel */}
+        {nodes.length > 0 && (
+          <Panel position="top-right" className="m-4">
+            <div className="bg-white/95 backdrop-blur-md rounded-xl shadow-xl border border-old-money-navy/20 p-4 min-w-[200px]">
+              <h4 className="font-serif font-bold text-old-money-navy mb-2 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-old-money-gold" />
+                Dashboard Stats
+              </h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-old-money-navy/60">Total Widgets:</span>
+                  <span className="font-semibold text-old-money-navy">{nodes.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-old-money-navy/60">Connections:</span>
+                  <span className="font-semibold text-old-money-navy">{edges.length}</span>
+                </div>
+                <div className="pt-2 border-t border-old-money-navy/10">
+                  <div className="flex flex-wrap gap-1">
+                    {nodes.slice(0, 5).map((node) => (
+                      <div
+                        key={node.id}
+                        className="px-2 py-1 bg-old-money-navy/10 rounded text-xs text-old-money-navy"
+                      >
+                        {node.type}
+                      </div>
+                    ))}
+                    {nodes.length > 5 && (
+                      <div className="px-2 py-1 bg-old-money-gold/20 rounded text-xs text-old-money-navy font-semibold">
+                        +{nodes.length - 5}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Panel>
+        )}
       </ReactFlow>
     </div>
   );
