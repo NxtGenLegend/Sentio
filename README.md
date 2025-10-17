@@ -44,39 +44,21 @@ Sentio automates and enhances the wealth advisor workflow with three core featur
 
 Sentio leverages AI at multiple layers to deliver intelligent wealth management:
 
-### News Relevance Analysis (OpenAI GPT-4)
+### News Relevance Analysis
 - **Context-Aware Scoring**: Analyzes article content against client occupation, net worth, age, portfolio composition, and custom keywords
 - **Nuanced Understanding**: Catches indirect relevance (e.g., "federal law changes" for agritech investors)
 - **Batch Processing**: Efficiently processes up to 15 articles per client per fetch cycle
 - **Threshold-Based Filtering**: Only alerts scoring ≥50/100 reach advisors, reducing noise
 
-### Client Summaries (OpenAI GPT-4)
+### Client Summaries
 - **Personalized Insights**: Generates custom summaries explaining why each article matters for specific clients
 - **Portfolio Context**: Incorporates client risk tolerance, age, occupation, and net worth into analysis
 - **Actionable Recommendations**: Suggests potential portfolio implications and discussion points
 
-### Advisor Digest Generation (OpenAI GPT-4)
+### Advisor Digest Generation
 - **Multi-Client Overview**: Synthesizes alerts across entire client base into coherent digest
 - **Priority Highlighting**: Identifies most critical alerts requiring immediate attention
 - **Trend Analysis**: Spots cross-client patterns and market-wide developments
-
-### Technical Implementation
-```javascript
-// Example: AI relevance scoring
-const aiAnalysis = await openai.chat.completions.create({
-  model: "gpt-4",
-  messages: [{
-    role: "system",
-    content: "You are a financial advisor assistant analyzing news relevance..."
-  }, {
-    role: "user",
-    content: `Client: ${client.occupation}, $${client.net_worth}, age ${client.age}
-              Keywords: ${keywords.join(', ')}
-              Article: ${article.title} - ${article.summary}
-              Score 0-100 on relevance and explain why.`
-  }]
-});
-```
 
 ## Tech Stack
 
@@ -226,20 +208,5 @@ Built by a passionate team of innovators:
 - **Luke Stokes**
 - **Camila Patino**
 - **Sabrina Ueslati**
-
-## Documentation
-
-- [Database Migration Guide](backend/docs/MIGRATION_INSTRUCTIONS.md)
-- [Gmail OAuth Setup](backend/docs/GMAIL_SETUP.md)
-
-## License
-
-[Add your license here]
-
-## Contact
-
-[Add contact information]
-
----
 
 **Sentio** - Empowering wealth advisors with AI-driven intelligence and intuitive portfolio visualization.
