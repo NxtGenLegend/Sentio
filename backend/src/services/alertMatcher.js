@@ -73,6 +73,7 @@ export async function matchArticlesWithClientAlerts(articles) {
 
     // Step 1: Basic filtering (pre-filter to reduce AI costs)
     // For MVP, we'll be VERY loose here and let AI do the heavy lifting
+    // TESTING MODE: Temporarily bypass filters to ensure articles pass through
     const preFilteredArticles = articles.filter(article => {
       // Check if article contains excluded keywords (hard filter)
       const hasExcluded = config.excluded_keywords?.some(keyword =>
@@ -80,16 +81,8 @@ export async function matchArticlesWithClientAlerts(articles) {
         article.summary.toLowerCase().includes(keyword.toLowerCase())
       );
 
-      // Check priority threshold
-      const priorityMap = { low: 1, medium: 2, high: 3 };
-      const meetsPriority = priorityMap[article.priority] >= priorityMap[config.priority_threshold];
-
-      // Check category
-      const matchesCategory = config.categories_enabled?.includes(article.category);
-
-      // Don't do keyword matching here - let AI decide relevance
-      // This allows AI to catch related topics like "federal law changes affecting agritech"
-      return !hasExcluded && meetsPriority && matchesCategory;
+      // TESTING: Skip priority and category filters for now
+      return !hasExcluded;
     });
 
     if (preFilteredArticles.length === 0) {
@@ -115,16 +108,16 @@ export async function matchArticlesWithClientAlerts(articles) {
       clientProfile
     );
 
-    // Step 3: Filter by AI relevance score (keep articles with score >= 50)
-    // Lowered from 60 to 50 to be less restrictive
-    const relevantArticles = analyzedArticles.filter(a => a.ai_relevance_score >= 50);
+    // Step 3: Filter by AI relevance score (keep articles with score >= 10)
+    // TESTING: Lowered to 10 for testing to ensure articles pass through
+    const relevantArticles = analyzedArticles.filter(a => a.ai_relevance_score >= 10);
 
     if (relevantArticles.length === 0) {
-      console.log(`⏭️  No AI-relevant articles for ${client.first_name} ${client.last_name} (all scored < 50)`);
+      console.log(`⏭️  No AI-relevant articles for ${client.first_name} ${client.last_name} (all scored < 10)`);
       continue;
     }
 
-    console.log(`🤖 ${relevantArticles.length} articles passed AI relevance threshold for ${client.first_name} ${client.last_name}`);
+    console.log(`🤖 ${relevantArticles.length} articles passed AI relevance threshold (>= 10) for ${client.first_name} ${client.last_name}`);
 
     // Step 4: Save to news_alerts table
     for (const article of relevantArticles) {
