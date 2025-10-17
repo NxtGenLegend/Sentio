@@ -11,10 +11,10 @@ router.get('/alerts', async (req, res) => {
   try {
     const { priority, category, clientId, limit } = req.query;
 
-    const alerts = newsService.getAllNews({
+    const alerts = await newsService.getAllNews({
       priority,
       category,
-      clientId: clientId ? parseInt(clientId) : undefined,
+      clientId: clientId || undefined,
       limit: limit ? parseInt(limit) : 50
     });
 
@@ -38,10 +38,10 @@ router.get('/alerts', async (req, res) => {
  */
 router.get('/client/:clientId', async (req, res) => {
   try {
-    const clientId = parseInt(req.params.clientId);
+    const clientId = req.params.clientId;
     const { priority, category, limit, onlyUnread } = req.query;
 
-    const alerts = newsService.getClientNews(clientId, {
+    const alerts = await newsService.getClientNews(clientId, {
       priority,
       category,
       limit: limit ? parseInt(limit) : 20,
@@ -68,7 +68,7 @@ router.get('/client/:clientId', async (req, res) => {
  */
 router.post('/fetch/:clientId', async (req, res) => {
   try {
-    const clientId = parseInt(req.params.clientId);
+    const clientId = req.params.clientId;
     const articles = await newsService.fetchNewsForClient(clientId);
 
     res.json({
@@ -114,8 +114,8 @@ router.post('/fetch-all', async (req, res) => {
  */
 router.put('/read/:alertId', async (req, res) => {
   try {
-    const alertId = parseInt(req.params.alertId);
-    newsService.markAsRead(alertId);
+    const alertId = req.params.alertId;
+    await newsService.markAsRead(alertId);
 
     res.json({
       success: true,
@@ -136,8 +136,8 @@ router.put('/read/:alertId', async (req, res) => {
  */
 router.get('/config/:clientId', async (req, res) => {
   try {
-    const clientId = parseInt(req.params.clientId);
-    const config = newsService.getAlertConfig(clientId);
+    const clientId = req.params.clientId;
+    const config = await newsService.getAlertConfig(clientId);
 
     res.json({
       success: true,
@@ -165,10 +165,10 @@ router.get('/config/:clientId', async (req, res) => {
  */
 router.post('/config/:clientId', async (req, res) => {
   try {
-    const clientId = parseInt(req.params.clientId);
+    const clientId = req.params.clientId;
     const config = req.body;
 
-    const updatedConfig = newsService.updateAlertConfig(clientId, config);
+    const updatedConfig = await newsService.updateAlertConfig(clientId, config);
 
     res.json({
       success: true,
@@ -190,7 +190,7 @@ router.post('/config/:clientId', async (req, res) => {
  */
 router.get('/clients', async (req, res) => {
   try {
-    const clients = newsService.getClients();
+    const clients = await newsService.getClients();
 
     res.json({
       success: true,

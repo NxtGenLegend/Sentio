@@ -1,18 +1,23 @@
-import db from '../config/database.js';
+import supabase from '../config/supabase.js';
 import tavilyService from './tavilyService.js';
 import aiService from './aiService.js';
 
 class NewsService {
   /**
    * Fetch and score news for a specific client
-   * @param {number} clientId - Client ID
+   * @param {string} clientId - Client UUID
    * @returns {Promise<Array>} Processed news alerts
    */
   async fetchNewsForClient(clientId) {
     try {
-      const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
-      if (!client) {
-        throw new Error(`Client ${clientId} not found`);
+      const { data: client, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('id', clientId)
+        .single();
+
+      if (error || !client) {
+        throw new Error(`Client ${clientId} not found: ${error?.message}`);
       }
 
       console.log(`\n📰 Fetching news for ${client.name}...`);
@@ -36,38 +41,38 @@ class NewsService {
 
       // Step 4: Check for duplicates and save to database
       const savedArticles = [];
-      const insertStmt = db.prepare(`
-        INSERT INTO news_alerts (
-          client_id, title, summary, url, source, published_at,
-          priority, category, tags, relevance_score, relevance_reason
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
 
       for (const article of relevantArticles) {
         // Check if article already exists for this client
-        const existing = db.prepare(
-          'SELECT id FROM news_alerts WHERE client_id = ? AND url = ?'
-        ).get(clientId, article.url);
+        const { data: existing } = await supabase
+          .from('news_alerts')
+          .select('id')
+          .eq('client_id', clientId)
+          .eq('url', article.url)
+          .single();
 
         if (!existing) {
-          const result = insertStmt.run(
-            clientId,
-            article.title,
-            article.summary,
-            article.url,
-            article.source,
-            article.publishedAt,
-            article.priority,
-            article.category,
-            JSON.stringify(article.tags),
-            article.relevanceScore,
-            article.reason
-          );
+          const { data: inserted, error: insertError } = await supabase
+            .from('news_alerts')
+            .insert({
+              client_id: clientId,
+              title: article.title,
+              summary: article.summary,
+              url: article.url,
+              source: article.source,
+              published_at: article.publishedAt,
+              priority: article.priority,
+              category: article.category,
+              tags: article.tags,
+              relevance_score: article.relevanceScore,
+              relevance_reason: article.reason
+            })
+            .select()
+            .single();
 
-          savedArticles.push({
-            id: result.lastInsertRowid,
-            ...article
-          });
+          if (!insertError && inserted) {
+            savedArticles.push(inserted);
+          }
         }
       }
 
@@ -80,11 +85,19 @@ class NewsService {
   }
 
   /**
-   * Fetch news for all clients
+   * Fetch news for all active clients
    * @returns {Promise<Object>} Results summary
    */
   async fetchNewsForAllClients() {
-    const clients = db.prepare('SELECT * FROM clients').all();
+    const { data: clients, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('status', 'active');
+
+    if (error) {
+      throw new Error(`Failed to fetch clients: ${error.message}`);
+    }
+
     const results = {
       total: clients.length,
       success: 0,
@@ -114,156 +127,199 @@ class NewsService {
 
   /**
    * Get news alerts for a client
-   * @param {number} clientId - Client ID
+   * @param {string} clientId - Client UUID
    * @param {Object} filters - Filter options
-   * @returns {Array} News alerts
+   * @returns {Promise<Array>} News alerts
    */
-  getClientNews(clientId, filters = {}) {
+  async getClientNews(clientId, filters = {}) {
     const { priority, category, limit = 20, onlyUnread = false } = filters;
 
-    let query = 'SELECT * FROM news_alerts WHERE client_id = ?';
-    const params = [clientId];
+    let query = supabase
+      .from('news_alerts')
+      .select('*')
+      .eq('client_id', clientId);
 
     if (priority && priority !== 'all') {
-      query += ' AND priority = ?';
-      params.push(priority);
+      query = query.eq('priority', priority);
     }
 
     if (category && category !== 'all') {
-      query += ' AND category = ?';
-      params.push(category);
+      query = query.eq('category', category);
     }
 
     if (onlyUnread) {
-      query += ' AND is_read = 0';
+      query = query.eq('is_read', false);
     }
 
-    query += ' ORDER BY published_at DESC LIMIT ?';
-    params.push(limit);
+    query = query
+      .order('published_at', { ascending: false })
+      .limit(limit);
 
-    const alerts = db.prepare(query).all(...params);
+    const { data, error } = await query;
 
-    return alerts.map(alert => ({
-      ...alert,
-      tags: JSON.parse(alert.tags || '[]')
-    }));
+    if (error) {
+      console.error('Error fetching client news:', error);
+      return [];
+    }
+
+    return data || [];
   }
 
   /**
    * Get news alerts for all clients (for the global news page)
    * @param {Object} filters - Filter options
-   * @returns {Array} News alerts
+   * @returns {Promise<Array>} News alerts with client info
    */
-  getAllNews(filters = {}) {
+  async getAllNews(filters = {}) {
     const { priority, category, clientId, limit = 50 } = filters;
 
-    let query = 'SELECT n.*, c.name as client_name FROM news_alerts n LEFT JOIN clients c ON n.client_id = c.id WHERE 1=1';
-    const params = [];
+    let query = supabase
+      .from('news_alerts')
+      .select(`
+        *,
+        clients (
+          id,
+          name
+        )
+      `);
 
     if (clientId && clientId !== 'all') {
-      query += ' AND n.client_id = ?';
-      params.push(clientId);
+      query = query.eq('client_id', clientId);
     }
 
     if (priority && priority !== 'all') {
-      query += ' AND n.priority = ?';
-      params.push(priority);
+      query = query.eq('priority', priority);
     }
 
     if (category && category !== 'all') {
-      query += ' AND n.category = ?';
-      params.push(category);
+      query = query.eq('category', category);
     }
 
-    query += ' ORDER BY n.published_at DESC LIMIT ?';
-    params.push(limit);
+    query = query
+      .order('published_at', { ascending: false })
+      .limit(limit);
 
-    const alerts = db.prepare(query).all(...params);
+    const { data, error } = await query;
 
-    return alerts.map(alert => ({
+    if (error) {
+      console.error('Error fetching all news:', error);
+      return [];
+    }
+
+    // Transform data to include client name
+    return (data || []).map(alert => ({
       ...alert,
-      tags: JSON.parse(alert.tags || '[]'),
-      relevantClients: [alert.client_name]
+      relevantClients: alert.clients ? [alert.clients.name] : []
     }));
   }
 
   /**
    * Mark news alert as read
-   * @param {number} alertId - Alert ID
+   * @param {string} alertId - Alert UUID
    */
-  markAsRead(alertId) {
-    db.prepare('UPDATE news_alerts SET is_read = 1 WHERE id = ?').run(alertId);
+  async markAsRead(alertId) {
+    const { error } = await supabase
+      .from('news_alerts')
+      .update({
+        is_read: true,
+        read_at: new Date().toISOString()
+      })
+      .eq('id', alertId);
+
+    if (error) {
+      console.error('Error marking news as read:', error);
+    }
   }
 
   /**
    * Get alert configuration for a client
-   * @param {number} clientId - Client ID
-   * @returns {Object|null} Alert configuration
+   * @param {string} clientId - Client UUID
+   * @returns {Promise<Object|null>} Alert configuration
    */
-  getAlertConfig(clientId) {
-    const config = db.prepare('SELECT * FROM alert_configs WHERE client_id = ?').get(clientId);
-    if (config) {
-      return {
-        ...config,
-        keywords: config.keywords ? config.keywords.split(',') : [],
-        categories: config.categories ? config.categories.split(',') : []
-      };
+  async getAlertConfig(clientId) {
+    const { data, error } = await supabase
+      .from('alert_configs')
+      .select('*')
+      .eq('client_id', clientId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
+      console.error('Error fetching alert config:', error);
     }
-    return null;
+
+    return data || null;
   }
 
   /**
    * Update alert configuration for a client
-   * @param {number} clientId - Client ID
+   * @param {string} clientId - Client UUID
    * @param {Object} config - Configuration settings
-   * @returns {Object} Updated configuration
+   * @returns {Promise<Object>} Updated configuration
    */
-  updateAlertConfig(clientId, config) {
-    const { keywords, categories, minPriority, frequency, emailEnabled } = config;
+  async updateAlertConfig(clientId, config) {
+    const { keywords, categories, minPriority, frequency, emailEnabled, emailDigestTime } = config;
 
-    const stmt = db.prepare(`
-      INSERT INTO alert_configs (client_id, keywords, categories, min_priority, frequency, email_enabled, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(client_id) DO UPDATE SET
-        keywords = excluded.keywords,
-        categories = excluded.categories,
-        min_priority = excluded.min_priority,
-        frequency = excluded.frequency,
-        email_enabled = excluded.email_enabled,
-        updated_at = CURRENT_TIMESTAMP
-    `);
+    const { data, error } = await supabase
+      .from('alert_configs')
+      .upsert({
+        client_id: clientId,
+        keywords: keywords || [],
+        categories: categories || [],
+        min_priority: minPriority || 'low',
+        frequency: frequency || 'realtime',
+        email_enabled: emailEnabled !== undefined ? emailEnabled : true,
+        email_digest_time: emailDigestTime || '08:00:00',
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
 
-    stmt.run(
-      clientId,
-      keywords?.join(',') || '',
-      categories?.join(',') || '',
-      minPriority || 'low',
-      frequency || 'realtime',
-      emailEnabled ? 1 : 0
-    );
+    if (error) {
+      console.error('Error updating alert config:', error);
+      throw error;
+    }
 
-    return this.getAlertConfig(clientId);
+    return data;
   }
 
   /**
    * Get clients list
-   * @returns {Array} List of clients
+   * @returns {Promise<Array>} List of clients
    */
-  getClients() {
-    return db.prepare('SELECT id, name, aum, client_since FROM clients').all();
+  async getClients() {
+    const { data, error } = await supabase
+      .from('clients')
+      .select('id, name, aum, client_since, status')
+      .eq('status', 'active')
+      .order('name');
+
+    if (error) {
+      console.error('Error fetching clients:', error);
+      return [];
+    }
+
+    return data || [];
   }
 
   /**
    * Clean up old news alerts (older than 30 days)
    */
-  cleanupOldAlerts() {
-    const result = db.prepare(`
-      DELETE FROM news_alerts
-      WHERE datetime(fetched_at) < datetime('now', '-30 days')
-    `).run();
+  async cleanupOldAlerts() {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    console.log(`🧹 Cleaned up ${result.changes} old news alerts`);
-    return result.changes;
+    const { error, count } = await supabase
+      .from('news_alerts')
+      .delete()
+      .lt('fetched_at', thirtyDaysAgo.toISOString());
+
+    if (error) {
+      console.error('Error cleaning up old alerts:', error);
+      return 0;
+    }
+
+    console.log(`🧹 Cleaned up ${count || 0} old news alerts`);
+    return count || 0;
   }
 }
 
