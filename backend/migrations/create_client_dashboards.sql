@@ -20,6 +20,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Drop trigger if it exists, then recreate (to avoid "already exists" error)
+DROP TRIGGER IF EXISTS trigger_update_client_dashboards_updated_at ON client_dashboards;
+
 CREATE TRIGGER trigger_update_client_dashboards_updated_at
   BEFORE UPDATE ON client_dashboards
   FOR EACH ROW
