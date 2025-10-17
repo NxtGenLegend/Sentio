@@ -229,8 +229,23 @@ Built by a passionate team of innovators:
 
 ## Documentation
 
-- [Database Migration Guide](backend/docs/MIGRATION_INSTRUCTIONS.md)
-- [Gmail OAuth Setup](backend/docs/GMAIL_SETUP.md)
+### Setup Guides
+- [Quick Start Guide](docs/setup/QUICK_START.md)
+- [Complete Setup Guide](docs/setup/SETUP_GUIDE.md)
+- [Database Migration Guide](docs/setup/MIGRATION_INSTRUCTIONS.md)
+- [Gmail OAuth Setup](docs/setup/GMAIL_SETUP.md)
+- [AI News Alerts Setup](docs/setup/AI_NEWS_ALERTS_SETUP.md)
+- [Client Dashboard Setup](docs/setup/CLIENT_DASHBOARD_SETUP.md)
+
+### Architecture
+- [Backend Architecture](docs/architecture/BACKEND_ARCHITECTURE.md)
+- [AI System Explained](docs/architecture/AI_SYSTEM_EXPLAINED.md)
+- [Alert System Explained](docs/architecture/ALERT_SYSTEM_EXPLAINED.md)
+- [Supabase Schema](docs/architecture/SUPABASE_SCHEMA.md)
+
+### Development History
+- [Changelog](docs/history/CHANGES.md)
+- [Feature History](docs/history/NEW_FEATURES_ADDED.md)
 
 ## License
 
