@@ -19,7 +19,7 @@ export async function getClients() {
     .from('clients')
     .select('*')
     .eq('status', 'active')
-    .order('name');
+    .order('last_name', { ascending: true });
 
   if (error) {
     console.error('Error fetching clients:', error);
@@ -131,7 +131,8 @@ export async function getAllNews(options = {}) {
       *,
       clients (
         id,
-        name
+        first_name,
+        last_name
       )
     `);
 
@@ -161,7 +162,7 @@ export async function getAllNews(options = {}) {
   // Transform data to match expected format
   return data.map(alert => ({
     ...alert,
-    relevantClients: alert.clients ? [alert.clients.name] : []
+    relevantClients: alert.clients ? [`${alert.clients.first_name} ${alert.clients.last_name}`] : []
   }));
 }
 
@@ -313,6 +314,161 @@ export async function updateAdvisorProfile(updates) {
   if (error) {
     console.error('Error updating advisor profile:', error);
     throw error;
+  }
+
+  return data;
+}
+
+/**
+ * Create a new client
+ */
+export async function createNewClient(clientData) {
+  const { data, error } = await supabase
+    .from('clients')
+    .insert({
+      advisor_id: '00000000-0000-0000-0000-000000000001', // TODO: Get from auth
+      ...clientData,
+      status: 'active'
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating client:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+/**
+ * Convert prospect to client
+ */
+export async function convertProspectToClient(prospectId, clientData) {
+  // Start a transaction-like operation
+  try {
+    // 1. Get prospect data
+    const { data: prospect, error: prospectError } = await supabase
+      .from('prospects')
+      .select('*')
+      .eq('id', prospectId)
+      .single();
+
+    if (prospectError) throw prospectError;
+
+    // 2. Create client from prospect data
+    // Split name into first and last name
+    const nameParts = prospect.name ? prospect.name.split(' ') : ['', ''];
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    const newClient = {
+      advisor_id: prospect.advisor_id,
+      first_name: firstName,
+      last_name: lastName,
+      primary_email: prospect.email,
+      mobile_phone: prospect.phone,
+      aum: clientData.aum || 0,
+      client_since: clientData.client_since || new Date().toISOString().split('T')[0],
+      account_type: clientData.account_type || 'individual',
+      profile: clientData.profile || {
+        holdings: [],
+        interests: [],
+        riskTolerance: 'moderate',
+        investmentStyle: 'balanced',
+        tags: prospect.tags || []
+      },
+      notes: prospect.notes || '',
+      status: 'active'
+    };
+
+    const { data: client, error: clientError } = await supabase
+      .from('clients')
+      .insert(newClient)
+      .select()
+      .single();
+
+    if (clientError) throw clientError;
+
+    // 3. Delete the prospect (now that they're a client)
+    const { error: deleteError } = await supabase
+      .from('prospects')
+      .delete()
+      .eq('id', prospectId);
+
+    if (deleteError) throw deleteError;
+
+    return client;
+  } catch (error) {
+    console.error('Error converting prospect to client:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete a prospect
+ */
+export async function deleteProspect(prospectId) {
+  const { error } = await supabase
+    .from('prospects')
+    .delete()
+    .eq('id', prospectId);
+
+  if (error) {
+    console.error('Error deleting prospect:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get portfolio allocations for a client
+ */
+export async function getPortfolioAllocations(clientId) {
+  const { data, error } = await supabase
+    .from('portfolio_allocations')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('percentage', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching portfolio allocations:', error);
+    return [];
+  }
+
+  return data;
+}
+
+/**
+ * Get client accounts
+ */
+export async function getClientAccounts(clientId) {
+  const { data, error } = await supabase
+    .from('client_accounts')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('is_primary', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching client accounts:', error);
+    return [];
+  }
+
+  return data;
+}
+
+/**
+ * Get holdings for a client
+ */
+export async function getHoldings(clientId) {
+  const { data, error } = await supabase
+    .from('holdings')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('current_value', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching holdings:', error);
+    return [];
   }
 
   return data;

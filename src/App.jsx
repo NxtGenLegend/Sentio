@@ -32,9 +32,26 @@ import {
   Filter,
   ExternalLink,
   Clock,
-  Tag
+  Tag,
+  Plus,
+  X,
+  ArrowRight
 } from 'lucide-react';
-import { getClients, getProspects } from './lib/supabase';
+import {
+  getClients,
+  getProspects,
+  createProspect,
+  createNewClient,
+  convertProspectToClient,
+  updateProspect,
+  getPortfolioAllocations,
+  getClientAccounts,
+  getHoldings,
+  getAlertConfig,
+  updateAlertConfig,
+  supabase
+} from './lib/supabase';
+import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 // Mock Data
 const mockProspects = [
@@ -795,6 +812,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activePage, setActivePage] = useState('prospects');
   const [selectedProspect, setSelectedProspect] = useState(null);
+  const [selectedClient, setSelectedClient] = useState(null);
   const [advisorProfile, setAdvisorProfile] = useState({
     name: 'Penelope Whitmore',
     email: 'p.whitmore@sentio.com',
@@ -809,6 +827,12 @@ function App() {
   const [clients, setClients] = useState([]);
   const [prospects, setProspects] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Modal state
+  const [showCreateProspectModal, setShowCreateProspectModal] = useState(false);
+  const [showCreateClientModal, setShowCreateClientModal] = useState(false);
+  const [showConvertToClientModal, setShowConvertToClientModal] = useState(false);
+  const [prospectToConvert, setProspectToConvert] = useState(null);
 
   // Load data from Supabase (only when authenticated)
   useEffect(() => {
@@ -903,14 +927,14 @@ function App() {
   // State for news filters
   const [selectedPriority, setSelectedPriority] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedClient, setSelectedClient] = useState('all');
+  const [selectedNewsClient, setSelectedNewsClient] = useState('all');
+  const [isFetchingNews, setIsFetchingNews] = useState(false);
 
   // Navigation items
   const navItems = [
     { id: 'prospects', label: 'Prospects', icon: Users },
     { id: 'clients', label: 'Clients', icon: UserCheck },
     { id: 'news', label: 'News Alerts', icon: Newspaper },
-    { id: 'dashboard', label: 'Client Dashboard', icon: LayoutDashboard },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
@@ -942,6 +966,543 @@ function App() {
       email: '',
       password: ''
     });
+  };
+
+  // Modal Components
+  const CreateProspectModal = () => {
+    const [formData, setFormData] = useState({
+      name: '',
+      email: '',
+      phone: '',
+      company: '',
+      status: 'new',
+      estimated_aum: '',
+      notes: '',
+      tags: ''
+    });
+
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      try {
+        await createProspect({
+          advisor_id: '00000000-0000-0000-0000-000000000001',
+          ...formData,
+          estimated_aum: formData.estimated_aum ? parseFloat(formData.estimated_aum) : null,
+          tags: formData.tags ? formData.tags.split(',').map(t => t.trim()) : [],
+          first_contact_date: new Date().toISOString().split('T')[0]
+        });
+
+        // Reload prospects
+        const prospectsData = await getProspects();
+        setProspects(prospectsData || []);
+
+        // Close modal and reset
+        setShowCreateProspectModal(false);
+        setFormData({
+          name: '',
+          email: '',
+          phone: '',
+          company: '',
+          status: 'new',
+          estimated_aum: '',
+          notes: '',
+          tags: ''
+        });
+      } catch (error) {
+        console.error('Error creating prospect:', error);
+        alert('Failed to create prospect');
+      }
+    };
+
+    if (!showCreateProspectModal) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-old-money-cream rounded-2xl shadow-2xl p-8 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="font-serif text-2xl font-bold text-old-money-navy">
+              Add New Prospect
+            </h2>
+            <button
+              onClick={() => setShowCreateProspectModal(false)}
+              className="text-old-money-navy/60 hover:text-old-money-navy transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Company
+                </label>
+                <input
+                  type="text"
+                  value={formData.company}
+                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                />
+              </div>
+
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Phone
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Status
+                </label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                >
+                  <option value="new">New</option>
+                  <option value="contacted">Contacted</option>
+                  <option value="warm">Warm</option>
+                  <option value="cold">Cold</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Estimated AUM
+                </label>
+                <input
+                  type="number"
+                  value={formData.estimated_aum}
+                  onChange={(e) => setFormData({ ...formData, estimated_aum: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                Tags (comma-separated)
+              </label>
+              <input
+                type="text"
+                value={formData.tags}
+                onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                placeholder="e.g. Family Office, Real Estate"
+              />
+            </div>
+
+            <div>
+              <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                Notes
+              </label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy resize-none"
+                rows="4"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowCreateProspectModal(false)}
+                className="flex-1 py-3 border-2 border-old-money-navy/20 text-old-money-navy rounded-lg font-semibold hover:bg-old-money-navy/5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-3 bg-old-money-navy text-old-money-cream rounded-lg font-semibold hover:bg-old-money-navy/90 transition-colors shadow-lg"
+              >
+                Create Prospect
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
+  const CreateClientModal = () => {
+    const [formData, setFormData] = useState({
+      name: '',
+      email: '',
+      phone: '',
+      aum: '',
+      client_since: new Date().toISOString().split('T')[0],
+      account_type: 'individual',
+      notes: '',
+      tags: ''
+    });
+
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      try {
+        await createNewClient({
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          aum: formData.aum ? parseFloat(formData.aum) : 0,
+          client_since: formData.client_since,
+          account_type: formData.account_type,
+          profile: {
+            holdings: [],
+            interests: [],
+            riskTolerance: 'moderate',
+            investmentStyle: 'balanced',
+            tags: formData.tags ? formData.tags.split(',').map(t => t.trim()) : []
+          },
+          notes: formData.notes
+        });
+
+        // Reload clients
+        const clientsData = await getClients();
+        setClients(clientsData || []);
+
+        // Close modal and reset
+        setShowCreateClientModal(false);
+        setFormData({
+          name: '',
+          email: '',
+          phone: '',
+          aum: '',
+          client_since: new Date().toISOString().split('T')[0],
+          account_type: 'individual',
+          notes: '',
+          tags: ''
+        });
+      } catch (error) {
+        console.error('Error creating client:', error);
+        alert('Failed to create client');
+      }
+    };
+
+    if (!showCreateClientModal) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-old-money-cream rounded-2xl shadow-2xl p-8 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="font-serif text-2xl font-bold text-old-money-navy">
+              Add New Client
+            </h2>
+            <button
+              onClick={() => setShowCreateClientModal(false)}
+              className="text-old-money-navy/60 hover:text-old-money-navy transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Assets Under Management
+                </label>
+                <input
+                  type="number"
+                  value={formData.aum}
+                  onChange={(e) => setFormData({ ...formData, aum: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                />
+              </div>
+
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Phone
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Client Since
+                </label>
+                <input
+                  type="date"
+                  value={formData.client_since}
+                  onChange={(e) => setFormData({ ...formData, client_since: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                />
+              </div>
+
+              <div>
+                <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                  Account Type
+                </label>
+                <select
+                  value={formData.account_type}
+                  onChange={(e) => setFormData({ ...formData, account_type: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                >
+                  <option value="individual">Individual</option>
+                  <option value="joint">Joint</option>
+                  <option value="trust">Trust</option>
+                  <option value="corporate">Corporate</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                Tags (comma-separated)
+              </label>
+              <input
+                type="text"
+                value={formData.tags}
+                onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                placeholder="e.g. High Net Worth, Retired"
+              />
+            </div>
+
+            <div>
+              <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                Notes
+              </label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy resize-none"
+                rows="4"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowCreateClientModal(false)}
+                className="flex-1 py-3 border-2 border-old-money-navy/20 text-old-money-navy rounded-lg font-semibold hover:bg-old-money-navy/5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-3 bg-old-money-navy text-old-money-cream rounded-lg font-semibold hover:bg-old-money-navy/90 transition-colors shadow-lg"
+              >
+                Create Client
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
+  const ConvertToClientModal = () => {
+    const [formData, setFormData] = useState({
+      aum: '',
+      client_since: new Date().toISOString().split('T')[0],
+      account_type: 'individual'
+    });
+
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      if (!prospectToConvert) return;
+
+      try {
+        await convertProspectToClient(prospectToConvert.id, {
+          aum: formData.aum ? parseFloat(formData.aum) : 0,
+          client_since: formData.client_since,
+          account_type: formData.account_type
+        });
+
+        // Reload both prospects and clients
+        const [prospectsData, clientsData] = await Promise.all([
+          getProspects(),
+          getClients()
+        ]);
+        setProspects(prospectsData || []);
+        setClients(clientsData || []);
+
+        // Clear selected prospect if it was the one converted
+        if (selectedProspect?.id === prospectToConvert.id) {
+          setSelectedProspect(prospectsData && prospectsData.length > 0 ? prospectsData[0] : null);
+        }
+
+        // Close modal and reset
+        setShowConvertToClientModal(false);
+        setProspectToConvert(null);
+        setFormData({
+          aum: '',
+          client_since: new Date().toISOString().split('T')[0],
+          account_type: 'individual'
+        });
+      } catch (error) {
+        console.error('Error converting prospect to client:', error);
+        alert('Failed to convert prospect to client');
+      }
+    };
+
+    if (!showConvertToClientModal || !prospectToConvert) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-old-money-cream rounded-2xl shadow-2xl p-8 max-w-lg w-full mx-4">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="font-serif text-2xl font-bold text-old-money-navy">
+              Convert to Client
+            </h2>
+            <button
+              onClick={() => {
+                setShowConvertToClientModal(false);
+                setProspectToConvert(null);
+              }}
+              className="text-old-money-navy/60 hover:text-old-money-navy transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              <strong>Converting:</strong> {prospectToConvert.name}
+              <br />
+              This will move {prospectToConvert.name} from prospects to clients.
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                Initial Assets Under Management *
+              </label>
+              <input
+                type="number"
+                value={formData.aum}
+                onChange={(e) => setFormData({ ...formData, aum: e.target.value })}
+                className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+                placeholder="0"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                Client Since
+              </label>
+              <input
+                type="date"
+                value={formData.client_since}
+                onChange={(e) => setFormData({ ...formData, client_since: e.target.value })}
+                className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+              />
+            </div>
+
+            <div>
+              <label className="block text-old-money-navy font-semibold mb-2 text-sm">
+                Account Type
+              </label>
+              <select
+                value={formData.account_type}
+                onChange={(e) => setFormData({ ...formData, account_type: e.target.value })}
+                className="w-full px-4 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy transition-colors bg-white text-old-money-navy"
+              >
+                <option value="individual">Individual</option>
+                <option value="joint">Joint</option>
+                <option value="trust">Trust</option>
+                <option value="corporate">Corporate</option>
+              </select>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConvertToClientModal(false);
+                  setProspectToConvert(null);
+                }}
+                className="flex-1 py-3 border-2 border-old-money-navy/20 text-old-money-navy rounded-lg font-semibold hover:bg-old-money-navy/5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-3 bg-old-money-navy text-old-money-cream rounded-lg font-semibold hover:bg-old-money-navy/90 transition-colors shadow-lg flex items-center justify-center gap-2"
+              >
+                <ArrowRight className="w-4 h-4" />
+                Convert to Client
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
   };
 
   // Login/Signup Page Component
@@ -1066,6 +1627,375 @@ function App() {
   };
 
   // Page Components
+  const ProspectDetailView = () => {
+    const [isEditingProspect, setIsEditingProspect] = useState(false);
+    const [editedProspect, setEditedProspect] = useState(null);
+
+    useEffect(() => {
+      if (selectedProspect) {
+        setEditedProspect({ ...selectedProspect });
+      }
+    }, [selectedProspect]);
+
+    if (!selectedProspect) {
+      return (
+        <div className="flex-1 flex h-full items-center justify-center">
+          <div className="text-center text-old-money-navy/60">
+            <Users className="w-16 h-16 mx-auto mb-4 opacity-40" />
+            <p>Select a prospect to view details</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (!editedProspect) return null;
+
+    const handleSaveProspect = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('prospects')
+          .update(editedProspect)
+          .eq('id', editedProspect.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        const updatedProspects = prospects.map(p => p.id === data.id ? data : p);
+        setProspects(updatedProspects);
+        setSelectedProspect(data);
+        setEditedProspect(data);
+        setIsEditingProspect(false);
+      } catch (error) {
+        console.error('Error updating prospect:', error);
+        alert('Failed to update prospect');
+      }
+    };
+
+    const handleCancelProspect = () => {
+      setEditedProspect({ ...selectedProspect });
+      setIsEditingProspect(false);
+    };
+
+    const prospect = isEditingProspect ? editedProspect : selectedProspect;
+
+    const EditableProspectField = ({ label, value, field, type = 'text', options = null }) => {
+      if (!isEditingProspect) {
+        return (
+          <div>
+            <label className="text-sm font-semibold text-old-money-navy/60">{label}</label>
+            <p className="text-old-money-navy">{value || 'Not provided'}</p>
+          </div>
+        );
+      }
+
+      if (type === 'select') {
+        return (
+          <div>
+            <label className="text-sm font-semibold text-old-money-navy/60 block mb-1">{label}</label>
+            <select
+              value={editedProspect[field] || ''}
+              onChange={(e) => setEditedProspect({ ...editedProspect, [field]: e.target.value })}
+              className="w-full px-3 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy bg-white text-old-money-navy"
+            >
+              {options.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        );
+      }
+
+      if (type === 'textarea') {
+        return (
+          <div>
+            <label className="text-sm font-semibold text-old-money-navy/60 block mb-1">{label}</label>
+            <textarea
+              value={editedProspect[field] || ''}
+              onChange={(e) => setEditedProspect({ ...editedProspect, [field]: e.target.value })}
+              className="w-full px-3 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy bg-white text-old-money-navy resize-none"
+              rows="4"
+            />
+          </div>
+        );
+      }
+
+      return (
+        <div>
+          <label className="text-sm font-semibold text-old-money-navy/60 block mb-1">{label}</label>
+          <input
+            type={type}
+            value={editedProspect[field] || ''}
+            onChange={(e) => setEditedProspect({ ...editedProspect, [field]: e.target.value })}
+            className="w-full px-3 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy bg-white text-old-money-navy"
+          />
+        </div>
+      );
+    };
+
+    return (
+      <div className="flex-1 overflow-y-auto bg-old-money-cream/30">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-old-money-navy to-old-money-navy/90 p-6 border-b-4 border-old-money-navy shadow-lg">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="font-serif text-3xl font-bold text-old-money-cream mb-2">
+                {prospect.name}
+              </h2>
+              <p className="text-old-money-cream/80">
+                {prospect.company || 'No company'} • {prospect.status || 'new'}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setProspectToConvert(selectedProspect);
+                  setShowConvertToClientModal(true);
+                }}
+                className="px-4 py-2 bg-old-money-cream/20 text-old-money-cream border border-old-money-cream/30 rounded-lg hover:bg-old-money-cream/30 transition-all duration-200 flex items-center gap-2"
+              >
+                <ArrowRight className="w-4 h-4" />
+                <span className="text-sm font-semibold">Convert to Client</span>
+              </button>
+              {!isEditingProspect ? (
+                <button
+                  onClick={() => setIsEditingProspect(true)}
+                  className="px-4 py-2 bg-old-money-cream text-old-money-navy rounded-lg hover:bg-old-money-cream/90 transition-all duration-200 font-semibold"
+                >
+                  Edit Details
+                </button>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCancelProspect}
+                    className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-all duration-200 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveProspect}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all duration-200 font-semibold"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Content Grid */}
+        <div className="p-6 space-y-6">
+          {/* Notes Widget - AT THE TOP as requested */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+            <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+              <StickyNote className="w-5 h-5" />
+              Notes & Additional Information
+            </h2>
+            <EditableProspectField label="Notes" value={prospect.notes} field="notes" type="textarea" />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Contact Information Widget - Always show */}
+            <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+              <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+                <Activity className="w-5 h-5" />
+                Contact Information
+              </h2>
+              <div className="space-y-3">
+                <EditableProspectField label="Name" value={prospect.name} field="name" />
+                {(prospect.primary_email || isEditingProspect) && (
+                  <EditableProspectField label="Primary Email" value={prospect.primary_email} field="primary_email" type="email" />
+                )}
+                {(prospect.secondary_email || isEditingProspect) && (
+                  <EditableProspectField label="Secondary Email" value={prospect.secondary_email} field="secondary_email" type="email" />
+                )}
+                {(prospect.mobile_phone || isEditingProspect) && (
+                  <EditableProspectField label="Mobile Phone" value={prospect.mobile_phone} field="mobile_phone" type="tel" />
+                )}
+                {(prospect.work_phone || isEditingProspect) && (
+                  <EditableProspectField label="Work Phone" value={prospect.work_phone} field="work_phone" type="tel" />
+                )}
+                {(prospect.home_phone || isEditingProspect) && (
+                  <EditableProspectField label="Home Phone" value={prospect.home_phone} field="home_phone" type="tel" />
+                )}
+                {(prospect.company || isEditingProspect) && (
+                  <EditableProspectField label="Company" value={prospect.company} field="company" />
+                )}
+              </div>
+            </div>
+
+            {/* Status & Profile Widget - Always show */}
+            <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+              <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+                <Target className="w-5 h-5" />
+                Status & Profile
+              </h2>
+              <div className="space-y-3">
+                <EditableProspectField
+                  label="Status"
+                  value={prospect.status}
+                  field="status"
+                  type="select"
+                  options={[
+                    { value: 'new', label: 'New' },
+                    { value: 'contacted', label: 'Contacted' },
+                    { value: 'warm', label: 'Warm' },
+                    { value: 'cold', label: 'Cold' }
+                  ]}
+                />
+                {(prospect.estimated_aum || isEditingProspect) && (
+                  <EditableProspectField label="Estimated AUM" value={prospect.estimated_aum} field="estimated_aum" type="number" />
+                )}
+                {prospect.tags && prospect.tags.length > 0 && (
+                  <div>
+                    <label className="text-sm font-semibold text-old-money-navy/60 block mb-2">Tags</label>
+                    <div className="flex flex-wrap gap-2">
+                      {prospect.tags.map((tag, index) => (
+                        <span key={index} className="px-3 py-1 bg-old-money-navy/10 text-old-money-navy rounded-full text-sm">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Personal Information - Only show if any field has data */}
+            {(prospect.date_of_birth || prospect.place_of_birth || prospect.ssn || prospect.mothers_maiden_name || isEditingProspect) && (
+              <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+                <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+                  <UserCheck className="w-5 h-5" />
+                  Personal Information
+                </h2>
+                <div className="space-y-3">
+                  {(prospect.date_of_birth || isEditingProspect) && (
+                    <EditableProspectField label="Date of Birth" value={prospect.date_of_birth} field="date_of_birth" type="date" />
+                  )}
+                  {(prospect.place_of_birth || isEditingProspect) && (
+                    <EditableProspectField label="Place of Birth" value={prospect.place_of_birth} field="place_of_birth" />
+                  )}
+                  {(prospect.ssn || isEditingProspect) && (
+                    <EditableProspectField label="SSN" value={prospect.ssn} field="ssn" />
+                  )}
+                  {(prospect.mothers_maiden_name || isEditingProspect) && (
+                    <EditableProspectField label="Mother's Maiden Name" value={prospect.mothers_maiden_name} field="mothers_maiden_name" />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Address Information - Only show if any address field has data */}
+            {(prospect.legal_street || prospect.mailing_street || isEditingProspect) && (
+              <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+                <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+                  <Target className="w-5 h-5" />
+                  Address Information
+                </h2>
+                <div className="space-y-4">
+                  {(prospect.legal_street || isEditingProspect) && (
+                    <div>
+                      <h3 className="text-sm font-bold text-old-money-navy/80 mb-2">Legal Address</h3>
+                      <div className="space-y-2">
+                        <EditableProspectField label="Street" value={prospect.legal_street} field="legal_street" />
+                        <div className="grid grid-cols-3 gap-2">
+                          <EditableProspectField label="City" value={prospect.legal_city} field="legal_city" />
+                          <EditableProspectField label="State" value={prospect.legal_state} field="legal_state" />
+                          <EditableProspectField label="ZIP" value={prospect.legal_zip} field="legal_zip" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {(prospect.mailing_street || isEditingProspect) && (
+                    <div>
+                      <h3 className="text-sm font-bold text-old-money-navy/80 mb-2">Mailing Address</h3>
+                      <div className="space-y-2">
+                        <EditableProspectField label="Street" value={prospect.mailing_street} field="mailing_street" />
+                        <div className="grid grid-cols-3 gap-2">
+                          <EditableProspectField label="City" value={prospect.mailing_city} field="mailing_city" />
+                          <EditableProspectField label="State" value={prospect.mailing_state} field="mailing_state" />
+                          <EditableProspectField label="ZIP" value={prospect.mailing_zip} field="mailing_zip" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Employment Information - Only show if any field has data */}
+            {(prospect.employment_status || prospect.employer_name || prospect.occupation || isEditingProspect) && (
+              <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+                <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+                  <DollarSign className="w-5 h-5" />
+                  Employment Information
+                </h2>
+                <div className="space-y-3">
+                  <EditableProspectField
+                    label="Employment Status"
+                    value={prospect.employment_status}
+                    field="employment_status"
+                    type="select"
+                    options={[
+                      { value: '', label: 'Select...' },
+                      { value: 'employed', label: 'Employed' },
+                      { value: 'not_employed', label: 'Not Employed' },
+                      { value: 'retired', label: 'Retired' }
+                    ]}
+                  />
+                  {(prospect.employer_name || isEditingProspect) && (
+                    <EditableProspectField label="Employer" value={prospect.employer_name} field="employer_name" />
+                  )}
+                  {(prospect.occupation || isEditingProspect) && (
+                    <EditableProspectField label="Occupation" value={prospect.occupation} field="occupation" />
+                  )}
+                  {(prospect.education_level || isEditingProspect) && (
+                    <EditableProspectField
+                      label="Education Level"
+                      value={prospect.education_level}
+                      field="education_level"
+                      type="select"
+                      options={[
+                        { value: '', label: 'Select...' },
+                        { value: 'High School', label: 'High School' },
+                        { value: 'Bachelor', label: "Bachelor's" },
+                        { value: 'Master', label: "Master's" },
+                        { value: 'MBA', label: 'MBA' },
+                        { value: 'PhD', label: 'PhD' }
+                      ]}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Interaction History Widget */}
+            {prospect.interactions && prospect.interactions.length > 0 && (
+              <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20 lg:col-span-2">
+                <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+                  <Calendar className="w-5 h-5" />
+                  Interaction History
+                </h2>
+                <div className="space-y-4">
+                  {prospect.interactions.map((interaction, index) => (
+                    <div key={index} className="border-l-4 border-old-money-navy/30 pl-4 py-2 bg-old-money-cream/20 rounded-r-lg">
+                      <div className="flex items-center gap-3 mb-1">
+                        <span className="font-semibold text-old-money-navy">{interaction.type}</span>
+                        <span className="text-sm text-old-money-navy/60">{interaction.date}</span>
+                      </div>
+                      <p className="text-old-money-navy/80 text-sm">{interaction.note}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const ProspectsPage = () => {
     if (loading) {
       return (
@@ -1092,9 +2022,18 @@ function App() {
         {/* Left Column - Prospect List */}
         <div className="w-80 border-r border-old-money-navy/20 bg-old-money-cream/30 overflow-y-auto">
           <div className="p-4">
-            <h3 className="font-serif text-xl font-semibold text-old-money-navy mb-4">
-              Pipeline
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-serif text-xl font-semibold text-old-money-navy">
+                Pipeline
+              </h3>
+              <button
+                onClick={() => setShowCreateProspectModal(true)}
+                className="p-2 bg-old-money-navy text-old-money-cream rounded-lg hover:bg-old-money-navy/90 transition-all duration-200 hover:scale-105"
+                title="Add New Prospect"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
             <div className="space-y-2">
               {prospects.map((prospect) => (
                 <button
@@ -1134,153 +2073,161 @@ function App() {
         </div>
 
       {/* Right Column - Prospect Details */}
-      <div className="flex-1 overflow-y-auto">
-        {selectedProspect ? (
-          <div className="p-8">
-            <h2 className="font-serif text-3xl font-bold text-old-money-navy mb-2">
-              {selectedProspect.name}
-            </h2>
-            <p className="text-old-money-navy/60 text-lg mb-6">
-              {selectedProspect.company}
-            </p>
-
-            {/* Tags */}
-            {selectedProspect.tags && selectedProspect.tags.length > 0 && (
-              <div className="mb-6">
-                <h3 className="font-serif text-lg font-semibold text-old-money-navy mb-2">
-                  Profile
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {selectedProspect.tags.map((tag, index) => (
-                    <span
-                      key={index}
-                      className="px-3 py-1 bg-old-money-navy/10 text-old-money-navy rounded-full text-sm"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Notes */}
-            {selectedProspect.notes && (
-              <div className="mb-6">
-                <h3 className="font-serif text-lg font-semibold text-old-money-navy mb-2">
-                  Notes
-                </h3>
-                <p className="text-old-money-navy/80 leading-relaxed">
-                  {selectedProspect.notes}
-                </p>
-              </div>
-            )}
-
-            {/* Interaction Log */}
-            {selectedProspect.interactions && selectedProspect.interactions.length > 0 && (
-              <div>
-                <h3 className="font-serif text-lg font-semibold text-old-money-navy mb-3">
-                  Interaction History
-                </h3>
-                <div className="space-y-4">
-                  {selectedProspect.interactions.map((interaction, index) => (
-                    <div
-                      key={index}
-                      className="border-l-4 border-old-money-navy/30 pl-4 py-2"
-                    >
-                      <div className="flex items-center gap-3 mb-1">
-                        <span className="font-semibold text-old-money-navy">
-                          {interaction.type}
-                        </span>
-                        <span className="text-sm text-old-money-navy/60">
-                          {interaction.date}
-                        </span>
-                      </div>
-                      <p className="text-old-money-navy/80 text-sm">
-                        {interaction.note}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <div className="text-center text-old-money-navy/60">
-              <Users className="w-16 h-16 mx-auto mb-4 opacity-40" />
-              <p>Select a prospect to view details</p>
-            </div>
-          </div>
-        )}
-      </div>
+      <ProspectDetailView />
     </div>
     );
   };
 
-  const ClientsPage = () => (
-    <div className="p-8">
-      <h2 className="font-serif text-3xl font-bold text-old-money-navy mb-6">
-        Current Clients
-      </h2>
 
-      <div className="bg-white rounded-lg shadow-lg overflow-hidden border border-old-money-navy/20">
-        <table className="w-full">
-          <thead className="bg-old-money-navy text-old-money-cream">
-            <tr>
-              <th className="px-6 py-4 text-left font-serif text-lg font-semibold">
-                Client Name
-              </th>
-              <th className="px-6 py-4 text-left font-serif text-lg font-semibold">
-                Assets Under Management
-              </th>
-              <th className="px-6 py-4 text-left font-serif text-lg font-semibold">
-                Client Since
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {mockClients.map((client, index) => (
-              <tr
-                key={client.id}
-                className={`border-b border-old-money-navy/10 hover:bg-old-money-cream/50 transition-all duration-200 hover:shadow-sm cursor-pointer ${
-                  index % 2 === 0 ? 'bg-old-money-cream/20' : 'bg-white'
-                }`}
-              >
-                <td className="px-6 py-4 font-semibold text-old-money-navy">
-                  {client.name}
-                </td>
-                <td className="px-6 py-4 text-old-money-navy">
-                  {client.aum}
-                </td>
-                <td className="px-6 py-4 text-old-money-navy/70">
-                  {client.clientSince}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="mt-6 p-4 bg-old-money-navy/5 rounded-lg border border-old-money-navy/20">
-        <div className="flex justify-between items-center">
-          <span className="font-serif text-lg text-old-money-navy">
-            Total Assets Under Management
-          </span>
-          <span className="font-serif text-2xl font-bold text-old-money-navy">
-            $297,000,000
-          </span>
+  const ClientsPage = () => {
+    if (loading) {
+      return (
+        <div className="flex h-full items-center justify-center">
+          <div className="text-old-money-navy text-lg">Loading clients...</div>
         </div>
+      );
+    }
+
+    // Calculate total AUM
+    const totalAUM = clients.reduce((sum, client) => sum + (client.aum || 0), 0);
+    const formatCurrency = (amount) => {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    };
+
+    return (
+      <div className="p-8">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="font-serif text-3xl font-bold text-old-money-navy">
+            Current Clients
+          </h2>
+          <button
+            onClick={() => setShowCreateClientModal(true)}
+            className="px-4 py-2 bg-old-money-navy text-old-money-cream rounded-lg hover:bg-old-money-navy/90 transition-all duration-200 flex items-center gap-2 hover:scale-105 shadow-lg"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="text-sm font-semibold">Add Client</span>
+          </button>
+        </div>
+
+        {clients.length === 0 ? (
+          <div className="flex h-full items-center justify-center py-20">
+            <div className="text-center">
+              <UserCheck className="w-16 h-16 mx-auto mb-4 text-old-money-navy/40" />
+              <p className="text-old-money-navy/60 text-lg">No clients found</p>
+              <p className="text-old-money-navy/40 text-sm mt-2">Add your first client to get started</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="bg-white rounded-lg shadow-lg overflow-hidden border border-old-money-navy/20">
+              <table className="w-full">
+                <thead className="bg-old-money-navy text-old-money-cream">
+                  <tr>
+                    <th className="px-6 py-4 text-left font-serif text-lg font-semibold">
+                      Client Name
+                    </th>
+                    <th className="px-6 py-4 text-left font-serif text-lg font-semibold">
+                      Assets Under Management
+                    </th>
+                    <th className="px-6 py-4 text-left font-serif text-lg font-semibold">
+                      Client Since
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clients.map((client, index) => (
+                    <tr
+                      key={client.id}
+                      onClick={() => {
+                        setSelectedClient(client);
+                        setActivePage('client-detail');
+                      }}
+                      className={`border-b border-old-money-navy/10 hover:bg-old-money-cream/50 transition-all duration-200 hover:shadow-sm cursor-pointer ${
+                        index % 2 === 0 ? 'bg-old-money-cream/20' : 'bg-white'
+                      }`}
+                    >
+                      <td className="px-6 py-4 font-semibold text-old-money-navy">
+                        {client.first_name && client.last_name
+                          ? `${client.first_name} ${client.middle_name ? client.middle_name + ' ' : ''}${client.last_name}`
+                          : client.name}
+                      </td>
+                      <td className="px-6 py-4 text-old-money-navy">
+                        {formatCurrency(client.aum || 0)}
+                      </td>
+                      <td className="px-6 py-4 text-old-money-navy/70">
+                        {client.client_since}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-6 p-4 bg-old-money-navy/5 rounded-lg border border-old-money-navy/20">
+              <div className="flex justify-between items-center">
+                <span className="font-serif text-lg text-old-money-navy">
+                  Total Assets Under Management
+                </span>
+                <span className="font-serif text-2xl font-bold text-old-money-navy">
+                  {formatCurrency(totalAUM)}
+                </span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const NewsAlertsPage = () => {
+    // Handle fetching news and sending alerts with AI
+    const handleFetchNews = async () => {
+      setIsFetchingNews(true);
+      try {
+        const response = await fetch('http://localhost:3001/api/alerts/fetch-and-send', {
+          method: 'POST'
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          const clientSummary = data.clientSummaries && data.clientSummaries.length > 0
+            ? data.clientSummaries
+                .map(cs => `${cs.client}: ${cs.alertCount} alerts (${cs.highPriority} high priority)`)
+                .join('\n')
+            : 'No clients matched any articles';
+
+          alert(
+            `✅ AI-Powered News Alerts Complete!\n\n` +
+            `📰 Fetched: ${data.articlesFetched || 0} articles\n` +
+            `💾 Saved: ${data.articlesSaved || 0} new articles\n` +
+            `👥 Clients with alerts: ${data.clientsWithAlerts || 0}\n` +
+            `📊 Total alerts: ${data.totalAlerts || 0}\n` +
+            `📧 Advisor email sent: ${data.advisorEmailSent ? 'Yes' : 'No'}\n` +
+            `🤖 AI digest generated: ${data.aiDigestGenerated ? 'Yes' : 'No'}\n\n` +
+            `Client Breakdown:\n${clientSummary}`
+          );
+        } else {
+          alert(`❌ Error: ${data.error || 'Unknown error occurred'}`);
+        }
+      } catch (error) {
+        alert(`❌ Error: ${error.message}\n\nMake sure the backend is running on http://localhost:3001`);
+        console.error('Fetch error:', error);
+      } finally {
+        setIsFetchingNews(false);
+      }
+    };
+
     // Filter news based on selected filters
     const filteredNews = mockNewsAlerts.filter(news => {
       const priorityMatch = selectedPriority === 'all' || news.priority === selectedPriority;
       const categoryMatch = selectedCategory === 'all' || news.category === selectedCategory;
-      const clientMatch = selectedClient === 'all' ||
-        news.relevantClients.includes(selectedClient) ||
+      const clientMatch = selectedNewsClient === 'all' ||
+        news.relevantClients.includes(selectedNewsClient) ||
         news.relevantClients.includes('All Clients');
 
       return priorityMatch && categoryMatch && clientMatch;
@@ -1348,8 +2295,8 @@ function App() {
               Relevant To Client
             </label>
             <select
-              value={selectedClient}
-              onChange={(e) => setSelectedClient(e.target.value)}
+              value={selectedNewsClient}
+              onChange={(e) => setSelectedNewsClient(e.target.value)}
               className="w-full px-3 py-2 border border-old-money-navy/30 rounded-lg bg-white text-old-money-navy focus:outline-none focus:border-old-money-navy transition-colors"
             >
               <option value="all">All Clients</option>
@@ -1379,9 +2326,15 @@ function App() {
                   Personalized news based on your clients' portfolios and interests
                 </p>
               </div>
-              <button className="px-4 py-2 bg-old-money-navy text-old-money-cream rounded-lg hover:bg-old-money-navy/90 transition-all duration-200 flex items-center gap-2 hover:scale-105">
+              <button
+                onClick={handleFetchNews}
+                disabled={isFetchingNews}
+                className="px-4 py-2 bg-old-money-navy text-old-money-cream rounded-lg hover:bg-old-money-navy/90 transition-all duration-200 flex items-center gap-2 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              >
                 <Bell className="w-4 h-4" />
-                <span className="text-sm font-semibold">Configure Alerts</span>
+                <span className="text-sm font-semibold">
+                  {isFetchingNews ? '⏳ Fetching...' : '🔄 Fetch News & Send Alerts'}
+                </span>
               </button>
             </div>
 
@@ -1472,8 +2425,863 @@ function App() {
     );
   };
 
+  const ClientDetailPage = () => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedClient, setEditedClient] = useState(null);
+    const [portfolioAllocations, setPortfolioAllocations] = useState([]);
+    const [clientAccounts, setClientAccounts] = useState([]);
+    const [holdings, setHoldings] = useState([]);
+    const [showPortfolio, setShowPortfolio] = useState(true);
+    const [showAlertConfig, setShowAlertConfig] = useState(false);
+    const [alertConfig, setAlertConfig] = useState({
+      keywords: [],
+      excluded_keywords: [],
+      priority_threshold: 'medium',
+      email_notifications: true,
+      categories_enabled: ['market', 'regulatory', 'general']
+    });
+    const [keywordInput, setKeywordInput] = useState('');
+    const [excludedKeywordInput, setExcludedKeywordInput] = useState('');
+
+    useEffect(() => {
+      if (selectedClient) {
+        setEditedClient({ ...selectedClient });
+        // Fetch portfolio data and alert config
+        fetchPortfolioData();
+        fetchAlertConfig();
+      }
+    }, [selectedClient]);
+
+    const fetchPortfolioData = async () => {
+      if (!selectedClient?.id) return;
+
+      const [allocations, accounts, clientHoldings] = await Promise.all([
+        getPortfolioAllocations(selectedClient.id),
+        getClientAccounts(selectedClient.id),
+        getHoldings(selectedClient.id)
+      ]);
+
+      setPortfolioAllocations(allocations);
+      setClientAccounts(accounts);
+      setHoldings(clientHoldings);
+    };
+
+    const fetchAlertConfig = async () => {
+      if (!selectedClient?.id) return;
+
+      const config = await getAlertConfig(selectedClient.id);
+      if (config) {
+        setAlertConfig(config);
+      }
+    };
+
+    const handleSaveAlertConfig = async () => {
+      try {
+        await updateAlertConfig(selectedClient.id, alertConfig);
+        setShowAlertConfig(false);
+        alert('Alert configuration saved successfully!');
+      } catch (error) {
+        console.error('Error saving alert config:', error);
+        alert('Failed to save alert configuration');
+      }
+    };
+
+    const addKeyword = () => {
+      if (keywordInput.trim() && !alertConfig.keywords.includes(keywordInput.trim())) {
+        setAlertConfig({
+          ...alertConfig,
+          keywords: [...alertConfig.keywords, keywordInput.trim()]
+        });
+        setKeywordInput('');
+      }
+    };
+
+    const removeKeyword = (keyword) => {
+      setAlertConfig({
+        ...alertConfig,
+        keywords: alertConfig.keywords.filter(k => k !== keyword)
+      });
+    };
+
+    const addExcludedKeyword = () => {
+      if (excludedKeywordInput.trim() && !alertConfig.excluded_keywords.includes(excludedKeywordInput.trim())) {
+        setAlertConfig({
+          ...alertConfig,
+          excluded_keywords: [...alertConfig.excluded_keywords, excludedKeywordInput.trim()]
+        });
+        setExcludedKeywordInput('');
+      }
+    };
+
+    const removeExcludedKeyword = (keyword) => {
+      setAlertConfig({
+        ...alertConfig,
+        excluded_keywords: alertConfig.excluded_keywords.filter(k => k !== keyword)
+      });
+    };
+
+    const toggleCategory = (category) => {
+      const categories = alertConfig.categories_enabled.includes(category)
+        ? alertConfig.categories_enabled.filter(c => c !== category)
+        : [...alertConfig.categories_enabled, category];
+
+      setAlertConfig({
+        ...alertConfig,
+        categories_enabled: categories
+      });
+    };
+
+    if (!selectedClient || !editedClient) {
+      return (
+        <div className="flex h-full items-center justify-center">
+          <div className="text-old-money-navy text-lg">No client selected</div>
+        </div>
+      );
+    }
+
+    const handleSave = async () => {
+      try {
+        // Update in Supabase
+        const { data, error } = await supabase
+          .from('clients')
+          .update(editedClient)
+          .eq('id', editedClient.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // Update local state
+        const updatedClients = clients.map(c => c.id === data.id ? data : c);
+        setClients(updatedClients);
+        setSelectedClient(data);
+        setEditedClient(data);
+        setIsEditing(false);
+      } catch (error) {
+        console.error('Error updating client:', error);
+        alert('Failed to update client');
+      }
+    };
+
+    const handleCancel = () => {
+      setEditedClient({ ...selectedClient });
+      setIsEditing(false);
+    };
+
+    const client = isEditing ? editedClient : selectedClient;
+    const fullName = client.first_name && client.last_name
+      ? `${client.first_name} ${client.middle_name ? client.middle_name + ' ' : ''}${client.last_name}`
+      : client.name || 'Unknown Client';
+
+    const formatCurrency = (amount) => {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount || 0);
+    };
+
+    const formatPhone = (phone) => phone || 'Not provided';
+    const formatAddress = (street, city, state, zip) => {
+      if (!street && !city) return 'Not provided';
+      return `${street || ''}, ${city || ''}, ${state || ''} ${zip || ''}`.trim();
+    };
+
+    const EditableField = ({ label, value, field, type = 'text', options = null }) => {
+      if (!isEditing) {
+        return (
+          <div>
+            <label className="text-sm font-semibold text-old-money-navy/60">{label}</label>
+            <p className="text-old-money-navy">{value || 'Not provided'}</p>
+          </div>
+        );
+      }
+
+      if (type === 'select') {
+        return (
+          <div>
+            <label className="text-sm font-semibold text-old-money-navy/60 block mb-1">{label}</label>
+            <select
+              value={editedClient[field] || ''}
+              onChange={(e) => setEditedClient({ ...editedClient, [field]: e.target.value })}
+              className="w-full px-3 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy bg-white text-old-money-navy"
+            >
+              {options.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        );
+      }
+
+      if (type === 'checkbox') {
+        return (
+          <div className="flex items-center justify-between p-3 bg-old-money-cream/30 rounded-lg">
+            <span className="text-sm font-semibold text-old-money-navy">{label}</span>
+            <input
+              type="checkbox"
+              checked={editedClient[field] || false}
+              onChange={(e) => setEditedClient({ ...editedClient, [field]: e.target.checked })}
+              className="w-5 h-5 text-old-money-navy border-old-money-navy/30 rounded focus:ring-old-money-navy"
+            />
+          </div>
+        );
+      }
+
+      if (type === 'textarea') {
+        return (
+          <div>
+            <label className="text-sm font-semibold text-old-money-navy/60 block mb-1">{label}</label>
+            <textarea
+              value={editedClient[field] || ''}
+              onChange={(e) => setEditedClient({ ...editedClient, [field]: e.target.value })}
+              className="w-full px-3 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy bg-white text-old-money-navy resize-none"
+              rows="4"
+            />
+          </div>
+        );
+      }
+
+      return (
+        <div>
+          <label className="text-sm font-semibold text-old-money-navy/60 block mb-1">{label}</label>
+          <input
+            type={type}
+            value={editedClient[field] || ''}
+            onChange={(e) => setEditedClient({ ...editedClient, [field]: e.target.value })}
+            className="w-full px-3 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy bg-white text-old-money-navy"
+          />
+        </div>
+      );
+    };
+
+    return (
+      <div className="h-full overflow-y-auto bg-old-money-cream/30">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-old-money-navy to-old-money-navy/90 p-6 border-b-4 border-old-money-navy shadow-lg">
+          <button
+            onClick={() => setActivePage('clients')}
+            className="mb-4 flex items-center gap-2 text-old-money-cream/80 hover:text-old-money-cream transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5" />
+            <span>Back to Clients</span>
+          </button>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="font-serif text-3xl font-bold text-old-money-cream mb-2">
+                {fullName}
+              </h1>
+              <p className="text-old-money-cream/80">
+                Client since {client.client_since || 'Unknown'} • {client.account_type || 'Individual'} Account
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right mr-4">
+                <div className="text-old-money-cream/80 text-sm mb-1">Assets Under Management</div>
+                <div className="text-3xl font-bold text-old-money-cream">
+                  {formatCurrency(client.aum)}
+                </div>
+              </div>
+              {!isEditing ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowAlertConfig(true)}
+                    className="px-4 py-2 bg-old-money-cream/10 text-old-money-cream border-2 border-old-money-cream rounded-lg hover:bg-old-money-cream/20 transition-all duration-200 font-semibold flex items-center gap-2"
+                  >
+                    <Bell className="w-4 h-4" />
+                    Configure Alerts
+                  </button>
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="px-4 py-2 bg-old-money-cream text-old-money-navy rounded-lg hover:bg-old-money-cream/90 transition-all duration-200 font-semibold"
+                  >
+                    Edit Profile
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCancel}
+                    className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-all duration-200 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all duration-200 font-semibold"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Portfolio Overview Section */}
+        {portfolioAllocations.length > 0 && (
+          <div className="p-6 bg-old-money-cream/20">
+            <button
+              onClick={() => setShowPortfolio(!showPortfolio)}
+              className="w-full flex items-center justify-between p-4 bg-white rounded-xl shadow-lg border border-old-money-navy/20 hover:shadow-xl transition-all duration-200 mb-4"
+            >
+              <div className="flex items-center gap-3">
+                <PieChart className="w-6 h-6 text-old-money-navy" />
+                <h2 className="font-serif text-2xl font-bold text-old-money-navy">Portfolio Overview</h2>
+              </div>
+              {showPortfolio ? <ChevronLeft className="w-6 h-6" /> : <ChevronRight className="w-6 h-6" />}
+            </button>
+
+            {showPortfolio && (
+              <div className="space-y-6">
+                {/* Account Summary Cards */}
+                {clientAccounts.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {clientAccounts.map((account) => (
+                      <div key={account.id} className="bg-white rounded-xl shadow-lg p-4 border border-old-money-navy/20">
+                        <div className="flex items-start justify-between mb-2">
+                          <h3 className="font-semibold text-old-money-navy">{account.account_name}</h3>
+                          {account.is_primary && (
+                            <span className="px-2 py-1 bg-old-money-navy text-old-money-cream text-xs rounded-full">Primary</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-old-money-navy/60 mb-2">{account.custodian}</p>
+                        <p className="text-2xl font-bold text-old-money-navy">{formatCurrency(account.balance)}</p>
+                        <p className="text-xs text-old-money-navy/60 mt-1 capitalize">{account.account_type.replace('_', ' ')}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Portfolio Allocation Chart and Holdings */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Pie Chart */}
+                  <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+                    <h3 className="font-serif text-xl font-bold text-old-money-navy mb-4">Asset Allocation</h3>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <RechartsPie>
+                        <Pie
+                          data={portfolioAllocations}
+                          dataKey="value"
+                          nameKey="subcategory"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={130}
+                        >
+                          {portfolioAllocations.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value) => formatCurrency(value)}
+                          contentStyle={{
+                            backgroundColor: '#F5F1E8',
+                            border: '1px solid #0A1929',
+                            borderRadius: '8px'
+                          }}
+                        />
+                        <Legend />
+                      </RechartsPie>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Category Breakdown */}
+                  <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+                    <h3 className="font-serif text-xl font-bold text-old-money-navy mb-4">Holdings Breakdown</h3>
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                      {portfolioAllocations.map((allocation) => (
+                        <div key={allocation.id} className="border-b border-old-money-navy/10 pb-2">
+                          <div className="flex justify-between items-center mb-1">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-4 h-4 rounded-full"
+                                style={{ backgroundColor: allocation.color }}
+                              />
+                              <span className="font-semibold text-old-money-navy">{allocation.subcategory}</span>
+                            </div>
+                            <span className="text-old-money-navy/60">{allocation.percentage}%</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-old-money-navy/60">{allocation.category}</span>
+                            <span className="font-semibold text-old-money-navy">{formatCurrency(allocation.value)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Holdings Table */}
+                {holdings.length > 0 && (
+                  <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+                    <h3 className="font-serif text-xl font-bold text-old-money-navy mb-4">Individual Holdings</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-old-money-navy/10">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-old-money-navy">Asset</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-old-money-navy">Type</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-old-money-navy">Value</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-old-money-navy">% of Portfolio</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-old-money-navy">Account</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {holdings.map((holding) => (
+                            <tr key={holding.id} className="border-b border-old-money-navy/10 hover:bg-old-money-cream/30 transition-colors">
+                              <td className="px-4 py-3">
+                                <div>
+                                  <p className="font-semibold text-old-money-navy">{holding.asset_name}</p>
+                                  {holding.ticker_symbol && (
+                                    <p className="text-xs text-old-money-navy/60">{holding.ticker_symbol}</p>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-old-money-navy/60 capitalize">{holding.asset_type}</td>
+                              <td className="px-4 py-3 text-right font-semibold text-old-money-navy">
+                                {formatCurrency(holding.current_value)}
+                              </td>
+                              <td className="px-4 py-3 text-right text-old-money-navy/60">
+                                {holding.allocation_percentage ? `${holding.allocation_percentage}%` : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-old-money-navy/60">{holding.account_name || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Content Grid */}
+        <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Financial Information Widget */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+            <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+              <DollarSign className="w-5 h-5" />
+              Financial Information
+            </h2>
+            <div className="space-y-3">
+              <EditableField
+                label="Assets Under Management (AUM)"
+                value={client.aum}
+                field="aum"
+                type="number"
+              />
+              <EditableField
+                label="Client Since"
+                value={client.client_since}
+                field="client_since"
+                type="date"
+              />
+              <EditableField
+                label="Account Type"
+                value={client.account_type}
+                field="account_type"
+                type="select"
+                options={[
+                  { value: 'individual', label: 'Individual' },
+                  { value: 'joint', label: 'Joint' },
+                  { value: 'trust', label: 'Trust' },
+                  { value: 'corporate', label: 'Corporate' }
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* Personal Information Widget */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+            <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+              <UserCheck className="w-5 h-5" />
+              Personal Information
+            </h2>
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-4">
+                <EditableField label="First Name" value={client.first_name} field="first_name" />
+                <EditableField label="Middle Name" value={client.middle_name} field="middle_name" />
+                <EditableField label="Last Name" value={client.last_name} field="last_name" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <EditableField label="Date of Birth" value={client.date_of_birth} field="date_of_birth" type="date" />
+                <EditableField label="Place of Birth" value={client.place_of_birth} field="place_of_birth" />
+              </div>
+              <EditableField
+                label="Social Security Number"
+                value={isEditing ? client.ssn : (client.ssn ? '***-**-' + client.ssn.slice(-4) : 'Not provided')}
+                field="ssn"
+              />
+              <EditableField label="Mother's Maiden Name" value={client.mothers_maiden_name} field="mothers_maiden_name" />
+            </div>
+          </div>
+
+          {/* Contact Information Widget */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+            <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              Contact Information
+            </h2>
+            <div className="space-y-3">
+              <EditableField
+                label={`Mobile Phone${client.preferred_phone === 'mobile' ? ' (Preferred)' : ''}`}
+                value={client.mobile_phone}
+                field="mobile_phone"
+                type="tel"
+              />
+              <EditableField
+                label={`Work Phone${client.preferred_phone === 'work' ? ' (Preferred)' : ''}`}
+                value={client.work_phone}
+                field="work_phone"
+                type="tel"
+              />
+              <EditableField
+                label={`Home Phone${client.preferred_phone === 'home' ? ' (Preferred)' : ''}`}
+                value={client.home_phone}
+                field="home_phone"
+                type="tel"
+              />
+              <EditableField
+                label="Preferred Phone"
+                value={client.preferred_phone}
+                field="preferred_phone"
+                type="select"
+                options={[
+                  { value: '', label: 'None' },
+                  { value: 'mobile', label: 'Mobile' },
+                  { value: 'work', label: 'Work' },
+                  { value: 'home', label: 'Home' }
+                ]}
+              />
+              <EditableField label="Primary Email" value={client.primary_email} field="primary_email" type="email" />
+              <EditableField label="Secondary Email" value={client.secondary_email} field="secondary_email" type="email" />
+            </div>
+          </div>
+
+          {/* Address Information Widget */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+            <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+              <Target className="w-5 h-5" />
+              Address Information
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-old-money-navy/80 mb-2">Legal Address</h3>
+                <div className="space-y-2">
+                  <EditableField label="Street" value={client.legal_street} field="legal_street" />
+                  <div className="grid grid-cols-3 gap-2">
+                    <EditableField label="City" value={client.legal_city} field="legal_city" />
+                    <EditableField label="State" value={client.legal_state} field="legal_state" />
+                    <EditableField label="ZIP" value={client.legal_zip} field="legal_zip" />
+                  </div>
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-old-money-navy/80 mb-2">Mailing Address</h3>
+                <div className="space-y-2">
+                  <EditableField label="Street" value={client.mailing_street} field="mailing_street" />
+                  <div className="grid grid-cols-3 gap-2">
+                    <EditableField label="City" value={client.mailing_city} field="mailing_city" />
+                    <EditableField label="State" value={client.mailing_state} field="mailing_state" />
+                    <EditableField label="ZIP" value={client.mailing_zip} field="mailing_zip" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Citizenship & Residency Widget */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+            <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5" />
+              Citizenship & Residency
+            </h2>
+            <div className="space-y-3">
+              <EditableField label="U.S. Citizen" value={client.us_citizen} field="us_citizen" type="checkbox" />
+              {!client.us_citizen && (
+                <>
+                  <EditableField label="Country of Citizenship" value={client.country_of_citizenship} field="country_of_citizenship" />
+                  <EditableField label="Country of Tax Residence" value={client.country_of_tax_residence} field="country_of_tax_residence" />
+                  <EditableField
+                    label="Residency Status"
+                    value={client.residency_status}
+                    field="residency_status"
+                    type="select"
+                    options={[
+                      { value: '', label: 'Select...' },
+                      { value: 'permanent', label: 'Permanent Resident' },
+                      { value: 'non_permanent', label: 'Non-Permanent Resident' },
+                      { value: 'nonresident', label: 'Non-Resident' }
+                    ]}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Employment Information Widget */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+            <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+              <DollarSign className="w-5 h-5" />
+              Employment Information
+            </h2>
+            <div className="space-y-3">
+              <EditableField
+                label="Employment Status"
+                value={client.employment_status}
+                field="employment_status"
+                type="select"
+                options={[
+                  { value: '', label: 'Select...' },
+                  { value: 'employed', label: 'Employed' },
+                  { value: 'not_employed', label: 'Not Employed' },
+                  { value: 'retired', label: 'Retired' }
+                ]}
+              />
+              {client.employment_status === 'employed' && (
+                <>
+                  <EditableField label="Employer Name" value={client.employer_name} field="employer_name" />
+                  <EditableField label="Occupation" value={client.occupation} field="occupation" />
+                  <div>
+                    <h3 className="text-sm font-bold text-old-money-navy/80 mb-2">Business Address</h3>
+                    <div className="space-y-2">
+                      <EditableField label="Street" value={client.business_street} field="business_street" />
+                      <div className="grid grid-cols-3 gap-2">
+                        <EditableField label="City" value={client.business_city} field="business_city" />
+                        <EditableField label="State" value={client.business_state} field="business_state" />
+                        <EditableField label="ZIP" value={client.business_zip} field="business_zip" />
+                      </div>
+                    </div>
+                  </div>
+                  <EditableField label="Tenure (years)" value={client.tenure_years} field="tenure_years" type="number" />
+                </>
+              )}
+              <EditableField
+                label="Education Level"
+                value={client.education_level}
+                field="education_level"
+                type="select"
+                options={[
+                  { value: '', label: 'Select...' },
+                  { value: 'High School', label: 'High School' },
+                  { value: 'Associate', label: 'Associate Degree' },
+                  { value: 'Bachelor', label: "Bachelor's Degree" },
+                  { value: 'Master', label: "Master's Degree" },
+                  { value: 'MBA', label: 'MBA' },
+                  { value: 'PhD', label: 'PhD' },
+                  { value: 'Other', label: 'Other' }
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* Regulatory & Compliance Widget */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20">
+            <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+              <Bell className="w-5 h-5" />
+              Regulatory & Compliance
+            </h2>
+            <div className="space-y-3">
+              <EditableField label="Senior Foreign Political Figure" value={client.is_foreign_political_figure} field="is_foreign_political_figure" type="checkbox" />
+              <EditableField label="Control Person / Affiliate (SEC Rule 144)" value={client.is_control_person} field="is_control_person" type="checkbox" />
+              <EditableField label="Affiliated with FINRA Member Firm" value={client.is_affiliated_finra} field="is_affiliated_finra" type="checkbox" />
+            </div>
+          </div>
+
+          {/* Notes Widget - Full Width */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-old-money-navy/20 lg:col-span-2">
+            <h2 className="font-serif text-xl font-bold text-old-money-navy mb-4 flex items-center gap-2">
+              <StickyNote className="w-5 h-5" />
+              Notes & Additional Information
+            </h2>
+            <EditableField label="Notes" value={client.notes} field="notes" type="textarea" />
+          </div>
+        </div>
+
+        {/* Alert Configuration Modal */}
+        {showAlertConfig && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-old-money-navy text-old-money-cream p-6 flex items-center justify-between border-b-4 border-old-money-navy">
+                <div className="flex items-center gap-3">
+                  <Bell className="w-6 h-6" />
+                  <h2 className="font-serif text-2xl font-bold">Configure News Alerts</h2>
+                </div>
+                <button
+                  onClick={() => setShowAlertConfig(false)}
+                  className="text-old-money-cream hover:text-old-money-cream/80 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Keywords Section */}
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-old-money-navy mb-3">Alert Keywords</h3>
+                  <p className="text-sm text-old-money-navy/60 mb-3">
+                    Add keywords to monitor. News articles containing these terms will generate alerts.
+                  </p>
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="text"
+                      value={keywordInput}
+                      onChange={(e) => setKeywordInput(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && addKeyword()}
+                      placeholder="Enter keyword (e.g., 'real estate', 'ESG')"
+                      className="flex-1 px-3 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy"
+                    />
+                    <button
+                      onClick={addKeyword}
+                      className="px-4 py-2 bg-old-money-navy text-old-money-cream rounded-lg hover:bg-old-money-navy/90 transition-all duration-200 font-semibold"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {alertConfig.keywords.map((keyword, index) => (
+                      <span
+                        key={index}
+                        className="px-3 py-1 bg-old-money-navy text-old-money-cream rounded-full text-sm flex items-center gap-2"
+                      >
+                        {keyword}
+                        <button
+                          onClick={() => removeKeyword(keyword)}
+                          className="hover:text-red-300 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Excluded Keywords Section */}
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-old-money-navy mb-3">Excluded Keywords</h3>
+                  <p className="text-sm text-old-money-navy/60 mb-3">
+                    News articles containing these terms will be filtered out.
+                  </p>
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="text"
+                      value={excludedKeywordInput}
+                      onChange={(e) => setExcludedKeywordInput(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && addExcludedKeyword()}
+                      placeholder="Enter excluded keyword (e.g., 'spam', 'advertisement')"
+                      className="flex-1 px-3 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy"
+                    />
+                    <button
+                      onClick={addExcludedKeyword}
+                      className="px-4 py-2 bg-old-money-navy text-old-money-cream rounded-lg hover:bg-old-money-navy/90 transition-all duration-200 font-semibold"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {alertConfig.excluded_keywords.map((keyword, index) => (
+                      <span
+                        key={index}
+                        className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm flex items-center gap-2"
+                      >
+                        {keyword}
+                        <button
+                          onClick={() => removeExcludedKeyword(keyword)}
+                          className="hover:text-red-900 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Priority Threshold */}
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-old-money-navy mb-3">Minimum Priority</h3>
+                  <p className="text-sm text-old-money-navy/60 mb-3">
+                    Only receive alerts at or above this priority level.
+                  </p>
+                  <select
+                    value={alertConfig.priority_threshold}
+                    onChange={(e) => setAlertConfig({ ...alertConfig, priority_threshold: e.target.value })}
+                    className="w-full px-3 py-2 border-2 border-old-money-navy/20 rounded-lg focus:outline-none focus:border-old-money-navy"
+                  >
+                    <option value="low">Low - All alerts</option>
+                    <option value="medium">Medium - Medium and High</option>
+                    <option value="high">High - Only critical alerts</option>
+                  </select>
+                </div>
+
+                {/* Categories */}
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-old-money-navy mb-3">Alert Categories</h3>
+                  <p className="text-sm text-old-money-navy/60 mb-3">
+                    Select which types of news you want to receive.
+                  </p>
+                  <div className="space-y-2">
+                    {['market', 'regulatory', 'general'].map((category) => (
+                      <label
+                        key={category}
+                        className="flex items-center gap-3 p-3 bg-old-money-cream/30 rounded-lg cursor-pointer hover:bg-old-money-cream/50 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={alertConfig.categories_enabled.includes(category)}
+                          onChange={() => toggleCategory(category)}
+                          className="w-5 h-5 text-old-money-navy border-old-money-navy/30 rounded focus:ring-old-money-navy"
+                        />
+                        <span className="font-semibold text-old-money-navy capitalize">{category}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Notification Preferences */}
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-old-money-navy mb-3">Notification Preferences</h3>
+                  <p className="text-sm text-old-money-navy/60 mb-3">
+                    Configure how you want to receive alerts. Email notifications will be set up later.
+                  </p>
+                  <label className="flex items-center gap-3 p-3 bg-old-money-cream/30 rounded-lg cursor-pointer hover:bg-old-money-cream/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={alertConfig.email_notifications}
+                      onChange={(e) => setAlertConfig({ ...alertConfig, email_notifications: e.target.checked })}
+                      className="w-5 h-5 text-old-money-navy border-old-money-navy/30 rounded focus:ring-old-money-navy"
+                    />
+                    <span className="font-semibold text-old-money-navy">Email Notifications (Setup Required)</span>
+                  </label>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end gap-3 pt-4 border-t border-old-money-navy/20">
+                  <button
+                    onClick={() => setShowAlertConfig(false)}
+                    className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-200 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveAlertConfig}
+                    className="px-6 py-2 bg-old-money-navy text-old-money-cream rounded-lg hover:bg-old-money-navy/90 transition-all duration-200 font-semibold"
+                  >
+                    Save Configuration
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const ClientDashboardPage = () => {
-    const [selectedClient] = useState('The Whitmore Family Trust');
+    const [selectedDashboardClient] = useState('The Whitmore Family Trust');
 
     return (
       <div className="h-full flex flex-col bg-gradient-to-br from-old-money-cream/30 to-white">
@@ -1482,7 +3290,7 @@ function App() {
           <div className="flex items-center justify-between mb-3">
             <div>
               <h2 className="font-serif text-2xl font-bold text-old-money-cream mb-1">
-                {selectedClient}
+                {selectedDashboardClient}
               </h2>
               <p className="text-old-money-cream/80 text-sm">
                 Last updated: October 16, 2024 • Portfolio Status: Active
@@ -1648,10 +3456,10 @@ function App() {
         return <ProspectsPage />;
       case 'clients':
         return <ClientsPage />;
+      case 'client-detail':
+        return <ClientDetailPage />;
       case 'news':
         return <NewsAlertsPage />;
-      case 'dashboard':
-        return <ClientDashboardPage />;
       case 'settings':
         return <SettingsPage />;
       default:
@@ -1719,7 +3527,11 @@ function App() {
         {/* Header */}
         <header className="bg-white border-b border-old-money-navy/20 px-8 py-6 shadow-sm">
           <h1 className="font-serif text-3xl font-bold text-old-money-navy">
-            {navItems.find(item => item.id === activePage)?.label}
+            {activePage === 'client-detail' && selectedClient
+              ? `${selectedClient.first_name && selectedClient.last_name
+                  ? `${selectedClient.first_name} ${selectedClient.last_name}`
+                  : selectedClient.name || 'Client'} Profile`
+              : navItems.find(item => item.id === activePage)?.label}
           </h1>
         </header>
 
@@ -1728,6 +3540,11 @@ function App() {
           {renderPage()}
         </main>
       </div>
+
+      {/* Modals */}
+      <CreateProspectModal />
+      <CreateClientModal />
+      <ConvertToClientModal />
     </div>
   );
 }

@@ -9,17 +9,24 @@
     "dev": "nodemon src/server.js",
     "init-db": "node src/config/initDb.js"
   },
-  "keywords": ["wealth-management", "news-alerts", "ai"],
+  "keywords": [
+    "wealth-management",
+    "news-alerts",
+    "ai"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
+    "@supabase/supabase-js": "^2.75.0",
+    "axios": "^1.6.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "sql.js": "^1.10.3",
-    "openai": "^4.20.1",
+    "express": "^4.18.2",
+    "googleapis": "^164.0.0",
     "node-cron": "^3.0.3",
-    "axios": "^1.6.2"
+    "openai": "^4.20.1",
+    "rss-parser": "^3.13.0",
+    "sql.js": "^1.10.3"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
