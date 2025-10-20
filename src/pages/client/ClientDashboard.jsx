@@ -9,7 +9,7 @@ import ReactFlow, {
   Panel,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Plus, Save, LayoutGrid, Sparkles, Grid3x3, Maximize2 } from 'lucide-react';
+import { Plus, Save, LayoutGrid, Sparkles, Grid, Maximize2 } from 'lucide-react';
 import { widgetTypes } from '../../components/dashboard/AssetWidgets';
 
 // Custom node components
@@ -227,7 +227,7 @@ const ClientDashboard = ({ clientId }) => {
           onClick={autoLayout}
           className="bg-white text-old-money-navy px-4 py-2.5 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 flex items-center gap-2 border border-old-money-navy/20 hover:scale-105 transform"
         >
-          <Grid3x3 className="w-5 h-5" />
+          <Grid className="w-5 h-5" />
           <span className="font-semibold">Auto Layout</span>
         </button>
 
