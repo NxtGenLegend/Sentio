@@ -1,8 +1,8 @@
 # Gmail OAuth Setup Instructions
 
-## Current Status
+## Overview
 
-**Gmail OAuth tokens have expired**. You need to re-authorize the app to send emails.
+Sentio uses Gmail API to send AI-powered news digest emails to advisors. This guide walks you through setting up Gmail OAuth authentication.
 
 ## Quick Setup (2 minutes)
 
@@ -12,7 +12,7 @@ In your backend directory, run:
 
 ```bash
 cd /mnt/c/Users/skjet/Coding/Sentio/backend
-node setup-gmail-auth.js
+node scripts/setup-gmail-auth.js
 ```
 
 ### Step 2: Authorize in Browser
@@ -49,7 +49,7 @@ curl -X POST http://localhost:3001/api/alerts/fetch-and-send
 Or use the test script:
 
 ```bash
-node test-email-debug.js
+node scripts/setup-test-client-alerts.js
 ```
 
 This should send a test email to **skjetly094@gmail.com**.
